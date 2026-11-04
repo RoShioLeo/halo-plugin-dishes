@@ -332,9 +332,9 @@ onMounted(() => {
                 type="text"
                 class="settings-input"
                 maxlength="80"
-                placeholder="浏览器标签显示，例如：家庭私厨"
+                placeholder="浏览器标签显示，例如：柠檬私厨"
               />
-              <p class="settings-hint">留空则使用默认「家庭私厨」。路由切换时会显示为「首页 · 标题」等形式。</p>
+              <p class="settings-hint">留空则使用默认「柠檬私厨」。路由切换时会显示为「首页 · 标题」等形式。</p>
             </div>
 
             <div class="settings-field">
@@ -344,9 +344,9 @@ onMounted(() => {
                 type="text"
                 class="settings-input"
                 maxlength="60"
-                placeholder="例如：家庭厨房"
+                placeholder="例如：柠檬私厨"
               />
-              <p class="settings-hint">留空则使用默认「家庭厨房」。</p>
+              <p class="settings-hint">留空则使用默认「柠檬私厨」。</p>
             </div>
 
             <div class="settings-field">
@@ -356,9 +356,9 @@ onMounted(() => {
                 class="settings-textarea"
                 maxlength="400"
                 rows="3"
-                placeholder="一句简短说明，显示在顶栏主标题下方"
+                placeholder="例如：今天，想吃点什么？"
               />
-              <p class="settings-hint">留空则使用默认副文案（最多 400 字，保存时服务端会截断）。</p>
+              <p class="settings-hint">留空则使用默认「今天，想吃点什么？」（最多 400 字，保存时服务端会截断）。</p>
             </div>
           </div>
 
@@ -494,7 +494,7 @@ onMounted(() => {
 
 <style scoped>
 .settings-card {
-  box-shadow: 0 4px 18px rgb(15 23 42 / 0.06);
+  box-shadow: none;
 }
 
 .settings-card :deep(.card-header),
@@ -503,28 +503,36 @@ onMounted(() => {
 }
 
 .settings-card :deep(.card-header) {
-  background: #fafafa;
+  background: var(--ls-dishes-surface, #fff);
 }
 
 .settings-tabs {
   display: flex;
-  border-bottom: 1px solid rgb(228 228 231);
-  background: #fafafa;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--ls-dishes-line, #e8e8eb);
+  background: var(--ls-dishes-surface, #fff);
 }
 
 .settings-tab {
   border: none;
   background: transparent;
-  padding: 0.75rem 1rem;
+  flex: 0 0 auto;
+  min-height: 48px;
+  padding: 16px;
   font-size: 0.875rem;
-  color: rgb(82 82 91);
+  color: var(--ls-dishes-muted, #6b6b75);
   cursor: pointer;
 }
 
 .settings-tab--active {
-  color: rgb(24 24 27);
-  font-weight: 600;
-  box-shadow: inset 0 -2px 0 rgb(24 24 27);
+  color: var(--ls-dishes-gold, #946d12);
+  font-weight: 500;
+  box-shadow: inset 0 -2px 0 var(--ls-dishes-highlight, #e7b63e);
+}
+
+.settings-tab:focus-visible {
+  outline: 2px solid var(--ls-dishes-gold, #946d12);
+  outline-offset: -4px;
 }
 
 .settings-body {
@@ -532,7 +540,7 @@ onMounted(() => {
 }
 
 .settings-loading {
-  color: rgb(113 113 122);
+  color: var(--ls-dishes-muted, #6b6b75);
   font-size: 0.875rem;
   padding: 0.5rem 0;
 }
@@ -540,27 +548,27 @@ onMounted(() => {
 .settings-section {
   display: flex;
   flex-direction: column;
-  gap: 0.875rem;
+  gap: 16px;
 }
 
 .settings-title {
   margin: 0;
   font-size: 1rem;
   font-weight: 600;
-  color: rgb(24 24 27);
+  color: var(--ls-dishes-ink, #29292e);
 }
 
 .settings-subtitle {
   margin: 0.25rem 0 0;
   font-size: 0.875rem;
   font-weight: 600;
-  color: rgb(39 39 42);
+  color: var(--ls-dishes-ink, #29292e);
 }
 
 .settings-desc {
   margin: 0;
   font-size: 0.875rem;
-  color: rgb(113 113 122);
+  color: var(--ls-dishes-muted, #6b6b75);
 }
 
 .settings-mode-list {
@@ -573,7 +581,7 @@ onMounted(() => {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
-  border: 1px solid rgb(228 228 231);
+  border: 1px solid var(--ls-dishes-line, #e8e8eb);
   border-radius: 8px;
   padding: 0.625rem 0.75rem;
 }
@@ -589,7 +597,7 @@ onMounted(() => {
 
 .settings-mode-desc {
   font-size: 0.8125rem;
-  color: rgb(113 113 122);
+  color: var(--ls-dishes-muted, #6b6b75);
 }
 
 .settings-field {
@@ -624,7 +632,7 @@ onMounted(() => {
 
 .settings-logo-placeholder {
   font-size: 10px;
-  color: rgb(113 113 122);
+  color: #6b6b75;
 }
 
 .settings-logo-actions {
@@ -635,7 +643,7 @@ onMounted(() => {
 .settings-field-label {
   font-size: 0.875rem;
   font-weight: 500;
-  color: rgb(63 63 70);
+  color: var(--ls-dishes-ink, #29292e);
 }
 
 .settings-input {
@@ -644,6 +652,9 @@ onMounted(() => {
   border-radius: 6px;
   padding: 0 0.75rem;
   font-size: 0.875rem;
+  border-color: var(--ls-dishes-line, #e8e8eb);
+  background: var(--ls-dishes-surface, #fff);
+  color: var(--ls-dishes-ink, #29292e);
 }
 
 .settings-textarea {
@@ -653,12 +664,15 @@ onMounted(() => {
   font-size: 0.875rem;
   resize: vertical;
   min-height: 88px;
+  border-color: var(--ls-dishes-line, #e8e8eb);
+  background: var(--ls-dishes-surface, #fff);
+  color: var(--ls-dishes-ink, #29292e);
 }
 
 .settings-hint {
   margin: 0;
   font-size: 0.75rem;
-  color: rgb(113 113 122);
+  color: var(--ls-dishes-muted, #6b6b75);
 }
 
 .settings-checkbox {
@@ -691,8 +705,8 @@ onMounted(() => {
   font-size: 0.8125rem;
   padding: 0.1rem 0.35rem;
   border-radius: 4px;
-  background: rgb(244 244 245);
-  color: rgb(63 63 70);
+  background: var(--ls-dishes-soft, #f7f7f8);
+  color: var(--ls-dishes-ink, #29292e);
 }
 
 .settings-backup-actions {
@@ -705,11 +719,11 @@ onMounted(() => {
 .settings-divider {
   height: 1px;
   margin: 0.75rem 0;
-  background: rgb(228 228 231);
+  background: var(--ls-dishes-line, #e8e8eb);
 }
 
 .settings-hint--danger {
-  color: rgb(185 28 28);
+  color: var(--ls-dishes-danger, #b91c1c);
 }
 
 .settings-backup-actions--import :deep(.settings-import-btn),

@@ -16,7 +16,7 @@ import reactor.core.scheduler.Schedulers;
 
 @RestController
 @RequestMapping(path = "/apis/plugins/dishes/admin", produces = MediaType.APPLICATION_JSON_VALUE)
-public class AdminApiController {
+public class AdminApiController extends ApiExceptionHandler {
 
     private final AdminFacadeService adminFacadeService;
     private final AdminBackupService adminBackupService;

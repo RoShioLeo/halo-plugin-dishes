@@ -14,7 +14,7 @@ import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping(path = {"/apis/plugins/dishes/public", "/plugins/dishes/public"}, produces = MediaType.APPLICATION_JSON_VALUE)
-public class PublicApiController {
+public class PublicApiController extends ApiExceptionHandler {
 
     private final PublicFacadeService publicFacadeService;
     private final PublicDomainWhitelistService publicDomainWhitelistService;

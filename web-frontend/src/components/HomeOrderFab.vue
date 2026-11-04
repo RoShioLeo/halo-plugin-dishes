@@ -39,7 +39,7 @@ onUnmounted(() => {
 <template>
   <div
     ref="rootRef"
-    class="pointer-events-none fixed bottom-0 left-1/2 z-40 flex w-full max-w-md -translate-x-1/2 justify-end"
+    class="ls-fab-wrap pointer-events-none fixed bottom-0 left-1/2 z-40 flex w-full max-w-md -translate-x-1/2 justify-end"
     :style="{
       paddingBottom: `max(0.85rem, calc(0.5rem + env(safe-area-inset-bottom, 0px)))`,
       paddingRight: `max(1rem, env(safe-area-inset-right, 0px))`,
@@ -47,7 +47,7 @@ onUnmounted(() => {
   >
     <RouterLink
       to="/order"
-      class="home-order-fab pointer-events-auto inline-flex h-10 items-center gap-1.5 rounded-full border border-blue-500/35 bg-blue-600 pl-3 pr-3.5 text-[12.5px] font-medium leading-none tracking-tight text-white shadow-[0_2px_14px_-2px_rgba(37,99,235,0.45),0_1px_4px_rgba(15,23,42,0.12)] ring-1 ring-white/20 transition-[transform,box-shadow,background-color,border-color] duration-200 ease-out active:scale-[0.97] motion-safe:hover:border-blue-400/40 motion-safe:hover:bg-blue-700 motion-safe:hover:shadow-[0_4px_22px_-4px_rgba(37,99,235,0.5),0_2px_8px_-2px_rgba(15,23,42,0.14)] motion-reduce:active:scale-100"
+      class="home-order-fab pointer-events-auto inline-flex h-10 items-center gap-2 rounded-full border border-blue-500/35 bg-blue-600 pl-4 pr-3.5 text-[12.5px] font-medium leading-none tracking-tight text-white shadow-[0_2px_14px_-2px_rgba(37,99,235,0.45),0_1px_4px_rgba(15,23,42,0.12)] ring-1 ring-white/20 transition-[transform,box-shadow,background-color,border-color] duration-200 ease-out active:scale-[0.97] motion-safe:hover:border-blue-400/40 motion-safe:hover:bg-blue-700 motion-safe:hover:shadow-[0_4px_22px_-4px_rgba(37,99,235,0.5),0_2px_8px_-2px_rgba(15,23,42,0.14)] motion-reduce:active:scale-100"
       aria-label="去点菜"
     >
       <svg

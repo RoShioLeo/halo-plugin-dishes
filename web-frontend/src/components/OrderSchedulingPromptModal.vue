@@ -77,21 +77,21 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         >
           <div class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-slate-200/90 sm:hidden" />
 
-          <div class="px-4 pb-2 pt-3 sm:pt-4">
+          <div class="px-4 pb-2 pt-4 sm:pt-4">
             <p class="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
               开始点菜
             </p>
             <h2 id="osp-title" class="mt-1 text-lg font-semibold tracking-tight text-slate-900">
               请选择点菜方式
             </h2>
-            <p class="mt-1.5 text-xs leading-relaxed text-slate-500">
+            <p class="mt-2 text-xs leading-relaxed text-slate-500">
               今日点菜立即生效；预约将为所选日期备餐。
             </p>
           </div>
 
           <div class="min-h-[11rem] px-4 pb-4">
             <Transition name="osp-step" mode="out-in">
-              <div v-if="step === 'choose'" key="choose" class="flex flex-col gap-2.5 pt-1">
+              <div v-if="step === 'choose'" key="choose" class="flex flex-col gap-2 pt-1">
                 <button
                   type="button"
                   class="osp-btn osp-btn--primary flex h-12 w-full items-center justify-center rounded-xl text-sm font-semibold text-white transition-transform active:scale-[0.98]"
@@ -114,7 +114,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   <input
                     v-model="pickDate"
                     type="date"
-                    class="osp-date-input w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm text-slate-900 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    class="osp-date-input w-full rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-2 text-sm text-slate-900 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     :min="minDate"
                     :max="maxDate"
                   />
@@ -123,14 +123,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 <div class="mt-4 flex gap-2">
                   <button
                     type="button"
-                    class="flex h-11 min-w-0 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    class="flex h-12 min-w-0 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50"
                     @click="step = 'choose'"
                   >
                     返回
                   </button>
                   <button
                     type="button"
-                    class="flex h-11 min-w-0 flex-[1.2] items-center justify-center rounded-xl bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    class="flex h-12 min-w-0 flex-[1.2] items-center justify-center rounded-xl bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                     :disabled="!pickDate || pickDate < minDate || pickDate > maxDate"
                     @click="onConfirmScheduled"
                   >

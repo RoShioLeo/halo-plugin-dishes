@@ -8,7 +8,7 @@ import { stars } from '@/utils/recommendationDisplay'
 import { getPublicBrandSubtitle, getPublicBrandTitle } from '@/utils/publicBranding'
 import OrderSchedulingPromptModal from '@/components/OrderSchedulingPromptModal.vue'
 import OrderSubmitNotesModal from '@/components/OrderSubmitNotesModal.vue'
-import headerLogoUrl from '@/assets/logo.png'
+import headerLogoUrl from '@/assets/lemon.svg'
 
 const PERIODS = [
   { code: 'breakfast' as const, label: '早餐' },
@@ -459,21 +459,22 @@ watch(activeCode, () => {
       <header
         class="sticky top-0 z-20 shrink-0 bg-slate-50 supports-[backdrop-filter]:backdrop-blur-sm"
       >
-        <div class="flex items-center gap-3 bg-white/95 px-4 py-3 backdrop-blur-sm">
+        <div class="ls-brand">
           <img
             :src="headerAvatarUrl"
             alt=""
             width="40"
             height="40"
             decoding="async"
-            class="h-10 w-10 shrink-0 rounded-xl object-cover shadow-inner ring-[0.5px] ring-amber-200/60"
+            class="ls-brand__logo"
           />
 
           <div class="min-w-0 flex-1">
-            <h1 class="text-[15px] font-semibold leading-tight tracking-tight text-slate-900">
+            <p class="ls-brand__kicker">LEMONSLICE CLOUD</p>
+            <h1>
               {{ publicBrandTitle }}
             </h1>
-            <p class="mt-0.5 text-[11px] leading-snug text-slate-500">
+            <p class="ls-brand__subtitle">
               {{ publicBrandSubtitle }}
             </p>
           </div>
@@ -481,10 +482,10 @@ watch(activeCode, () => {
 
         <!-- 餐段：留白分段 + 滑动白底高亮 -->
         <div
-          class="order-header border-b border-slate-200/90 bg-white px-3 pb-3.5 pt-3"
+          class="order-header border-b border-slate-200/90 bg-white px-4 pb-3.5 pt-4"
         >
           <p
-            class="mb-2.5 text-xs font-medium tracking-wide"
+            class="mb-2 text-xs font-medium tracking-wide"
             :class="
               isSchedulingMode && orderingDate
                 ? 'text-blue-700'
@@ -508,14 +509,14 @@ watch(activeCode, () => {
               class="period-seg-glider pointer-events-none absolute rounded-lg bg-white shadow-[0_1px_2px_rgba(15,23,42,0.05)] ring-1 ring-slate-200/70"
               aria-hidden="true"
             />
-            <div class="relative z-[1] flex gap-2.5">
+            <div class="relative z-[1] flex gap-2">
               <button
                 v-for="p in PERIODS"
                 :key="p.code"
                 type="button"
                 role="tab"
                 :aria-selected="activeCode === p.code"
-                class="period-seg-btn relative min-h-[2.25rem] flex-1 rounded-lg py-1.5 text-sm font-medium transition-[color,transform] duration-300 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] motion-safe:active:scale-[0.98]"
+                class="period-seg-btn relative min-h-[2.25rem] flex-1 rounded-lg py-2 text-sm font-medium transition-[color,transform] duration-300 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] motion-safe:active:scale-[0.98]"
                 :class="
                   activeCode === p.code
                     ? 'text-blue-700'
@@ -526,7 +527,7 @@ watch(activeCode, () => {
                 <span class="relative z-[1]">{{ p.label }}</span>
                 <span
                   v-if="periodSelectionCounts[p.code]"
-                  class="absolute right-1 top-1 z-[2] flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-0.5 text-[9px] font-semibold leading-none text-white ring-2 ring-white"
+                  class="absolute right-1 top-1 z-[2] flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[9px] font-semibold leading-none text-white ring-2 ring-white"
                 >
                   {{ periodSelectionCounts[p.code] }}
                 </span>
@@ -542,7 +543,7 @@ watch(activeCode, () => {
         class="flex min-h-0 flex-1 gap-0 overflow-hidden"
       >
         <div
-          class="order-cat-rail order-cat-rail--scroll flex min-h-0 w-[5.5rem] shrink-0 flex-col gap-1.5 overflow-y-auto overflow-x-hidden overscroll-y-contain border-r border-slate-200 bg-white py-3 pl-2 pr-1"
+          class="order-cat-rail order-cat-rail--scroll flex min-h-0 w-[5.5rem] shrink-0 flex-col gap-2 overflow-y-auto overflow-x-hidden overscroll-y-contain border-r border-slate-200 bg-white py-4 pl-2 pr-1"
         >
           <div
             v-for="n in 5"
@@ -551,16 +552,16 @@ watch(activeCode, () => {
           />
         </div>
         <div
-          class="order-menu-scroll order-menu-scroll--above-dock min-h-0 min-w-0 flex-1 space-y-2.5 overflow-y-auto overscroll-y-contain bg-white px-3 py-3 [-webkit-overflow-scrolling:touch]"
+          class="order-menu-scroll order-menu-scroll--above-dock min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto overscroll-y-contain bg-white px-4 py-4 [-webkit-overflow-scrolling:touch]"
         >
           <div class="h-3.5 w-20 animate-pulse rounded bg-slate-100" />
           <div
             v-for="n in 6"
             :key="n"
-            class="flex gap-3 rounded-lg border border-slate-100 bg-white p-2.5 shadow-sm"
+            class="flex gap-4 rounded-lg border border-slate-100 bg-white p-2 shadow-sm"
           >
             <div class="h-14 w-14 shrink-0 animate-pulse rounded-md bg-slate-100 ring-1 ring-slate-200/50 shadow-[0_1px_4px_rgba(15,23,42,0.05)]" />
-            <div class="min-w-0 flex-1 space-y-2 py-0.5">
+            <div class="min-w-0 flex-1 space-y-2 py-1">
               <div class="h-3.5 w-3/4 animate-pulse rounded bg-slate-100" />
               <div class="h-3 w-1/2 animate-pulse rounded bg-slate-100" />
             </div>
@@ -578,7 +579,7 @@ watch(activeCode, () => {
         </p>
         <button
           type="button"
-          class="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
           @click="bootstrap"
         >
           重新加载
@@ -596,7 +597,7 @@ watch(activeCode, () => {
         >
           <button
             type="button"
-            class="order-cat-item mb-px w-full rounded-md px-2 py-2.5 text-left text-[12px] leading-snug text-slate-600 transition-colors duration-150"
+            class="order-cat-item mb-px w-full rounded-md px-2 py-2 text-left text-[12px] leading-snug text-slate-600 transition-colors duration-150"
             :class="
               activeCategoryId === null
                 ? 'order-cat-item--active bg-blue-50/80 font-medium text-blue-800'
@@ -610,7 +611,7 @@ watch(activeCode, () => {
             v-for="c in categories"
             :key="c.id"
             type="button"
-            class="order-cat-item mb-px w-full rounded-md px-2 py-2.5 text-left text-[12px] leading-snug text-slate-600 transition-colors duration-150"
+            class="order-cat-item mb-px w-full rounded-md px-2 py-2 text-left text-[12px] leading-snug text-slate-600 transition-colors duration-150"
             :class="
               activeCategoryId === c.id
                 ? 'order-cat-item--active bg-blue-50/80 font-medium text-blue-800'
@@ -626,7 +627,7 @@ watch(activeCode, () => {
           class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white"
         >
           <div
-            class="flex shrink-0 items-center justify-between border-b border-slate-100 bg-white px-3 py-2.5"
+            class="flex shrink-0 items-center justify-between border-b border-slate-100 bg-white px-4 py-2"
           >
             <h2 class="text-sm font-medium text-slate-900">
               {{ rightHeading }}
@@ -638,7 +639,7 @@ watch(activeCode, () => {
 
           <div
             ref="menuScrollEl"
-            class="order-menu-scroll order-menu-scroll--above-dock min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-2 [-webkit-overflow-scrolling:touch]"
+            class="order-menu-scroll order-menu-scroll--above-dock min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-2 [-webkit-overflow-scrolling:touch]"
           >
             <Transition name="dish-panel" mode="out-in">
               <ul
@@ -658,7 +659,7 @@ watch(activeCode, () => {
                 >
                   <button
                     type="button"
-                    class="order-dish-row flex w-full gap-3 rounded-lg border p-2.5 text-left shadow-sm transition-[border-color,background-color,box-shadow] duration-150"
+                    class="order-dish-row flex w-full gap-4 rounded-lg border p-2 text-left shadow-sm transition-[border-color,background-color,box-shadow] duration-150"
                     :class="
                       isSelected(d.id)
                         ? 'border-blue-200/90 bg-blue-50/40 shadow-[0_2px_10px_rgba(59,130,246,0.12)]'
@@ -712,7 +713,7 @@ watch(activeCode, () => {
                       </span>
                     </div>
                     <div
-                      class="flex min-w-0 flex-1 flex-col py-0.5"
+                      class="flex min-w-0 flex-1 flex-col py-1"
                       :class="isSelected(d.id) ? 'min-h-[3.5rem]' : ''"
                     >
                       <div class="flex items-start justify-between gap-2">
@@ -726,15 +727,15 @@ watch(activeCode, () => {
                           {{ stars(d.recommendation_level) }}
                         </p>
                       </div>
-                      <p class="mt-0.5 truncate text-xs text-slate-500">
+                      <p class="mt-1 truncate text-xs text-slate-500">
                         {{ d.category_name }}
                       </p>
                       <div
                         v-if="isSelected(d.id)"
-                        class="mt-auto flex justify-end pt-0.5"
+                        class="mt-auto flex justify-end pt-1"
                       >
                         <span
-                          class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-700"
+                          class="shrink-0 rounded px-2 py-1 text-[10px] font-medium text-blue-700"
                           @click.stop
                         >
                           已选
@@ -753,7 +754,7 @@ watch(activeCode, () => {
 
     <!-- 底栏：固定叠在底部，可盖住列表；pointer-events 让空白处滑动/点击穿透到列表 -->
     <div
-      class="order-submit-dock pointer-events-none fixed bottom-0 left-1/2 z-[38] w-full max-w-md -translate-x-1/2 overflow-hidden rounded-t-2xl border border-b-0 border-slate-200/90 bg-white px-3 pt-3 shadow-[0_-4px_24px_rgba(15,23,42,0.08)] pb-[max(0.65rem,env(safe-area-inset-bottom,0px))]"
+      class="order-submit-dock pointer-events-none fixed bottom-0 left-1/2 z-[38] w-full max-w-md -translate-x-1/2 overflow-hidden rounded-t-2xl border border-b-0 border-slate-200/90 bg-white px-4 pt-4 shadow-[0_-4px_24px_rgba(15,23,42,0.08)] pb-[max(0.65rem,env(safe-area-inset-bottom,0px))]"
     >
         <p
           v-if="submitTip"
@@ -761,18 +762,18 @@ watch(activeCode, () => {
         >
           {{ submitTip }}
         </p>
-        <div class="pointer-events-auto mb-3 flex max-h-[5.5rem] flex-col gap-1.5 overflow-hidden">
+        <div class="pointer-events-auto mb-4 flex max-h-[5.5rem] flex-col gap-2 overflow-hidden">
           <p class="text-xs text-slate-500">
             已选 <span class="font-medium text-slate-700">{{ totalQty }}</span> 份
           </p>
           <div
             v-if="currentLines.length"
-            class="flex gap-2 overflow-x-auto overflow-y-hidden pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            class="flex gap-2 overflow-x-auto overflow-y-hidden pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             <div
               v-for="line in currentLines"
               :key="line.id"
-              class="flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 py-1 pl-2.5 pr-1 text-[11px] text-slate-800"
+              class="flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 py-1 pl-2 pr-1 text-[11px] text-slate-800"
             >
               <span class="max-w-[6.5rem] truncate">{{ line.dish.name }}</span>
               <div class="flex items-center rounded-full border border-slate-200 bg-white">
@@ -808,7 +809,7 @@ watch(activeCode, () => {
         <div class="pointer-events-auto flex gap-2">
           <button
             type="button"
-            class="flex h-12 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+            class="flex h-12 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
             aria-label="返回首页"
             @click="router.push('/')"
           >
@@ -892,7 +893,7 @@ watch(activeCode, () => {
  */
 .period-seg {
   --seg-pad: 0.25rem;
-  --seg-gap: 0.625rem;
+  --seg-gap: 0.5rem;
   --period-i: 0;
 }
 
@@ -921,7 +922,7 @@ watch(activeCode, () => {
 }
 
 .order-cat-item--active {
-  box-shadow: inset 2px 0 0 0 #2563eb;
+  box-shadow: inset 2px 0 0 0 var(--ls-accent);
 }
 
 /* 页面进入：轻量上浮 + 淡入 */

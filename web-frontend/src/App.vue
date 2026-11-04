@@ -106,12 +106,15 @@ onMounted(() => {
     </div>
 
     <div v-if="showPasswordModal" class="access-mask">
-      <div class="access-card">
-        <h3 class="access-title">需要密码访问</h3>
+      <div class="access-card" role="dialog" aria-modal="true" aria-labelledby="dishes-access-title">
+        <h3 id="dishes-access-title" class="access-title">欢迎来到柠檬私厨</h3>
         <p class="access-desc">请输入前台访问密码，验证通过后本地缓存生效。</p>
+        <label for="dishes-access-password" class="sr-only">访问密码</label>
         <input
+          id="dishes-access-password"
           v-model="passwordInput"
           type="password"
+          autocomplete="current-password"
           class="access-input"
           placeholder="请输入访问密码"
           @keyup.enter="submitPasswordAccess"

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 
 class ApiExceptionHandlerTest {
 
@@ -16,6 +17,7 @@ class ApiExceptionHandlerTest {
         assertNotNull(response.getBody());
         assertEquals(false, response.getBody().ok());
         assertEquals("需要密码验证", response.getBody().message());
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
     }
 
     @Test
@@ -25,5 +27,6 @@ class ApiExceptionHandlerTest {
         assertNotNull(response.getBody());
         assertEquals(false, response.getBody().ok());
         assertEquals("notfound", response.getBody().message());
+        assertEquals(HttpStatus.OK, response.getStatusCode());
     }
 }

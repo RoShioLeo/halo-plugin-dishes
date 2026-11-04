@@ -5,6 +5,10 @@ plugins {
 
 group 'com.dishes.web-frontend'
 
+node {
+    pnpmVersion = '10.12.4'
+}
+
 tasks.register('pnpmBuild', PnpmTask) {
     group = 'build'
     description = 'Build the public dishes SPA (Vite)'

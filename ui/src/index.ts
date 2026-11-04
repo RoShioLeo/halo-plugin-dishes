@@ -16,9 +16,9 @@ export default definePlugin({
           import(/* webpackChunkName: "DishesPluginOutlet" */ './views/DishesPluginOutlet.vue'),
         redirect: { name: 'DishesDishes' },
         meta: {
-          title: '家庭私厨',
+          title: '柠檬私厨',
           menu: {
-            name: '家庭私厨',
+            name: '柠檬私厨',
             group: 'content',
             icon: markRaw(RiRestaurant2Line),
             priority: 40,

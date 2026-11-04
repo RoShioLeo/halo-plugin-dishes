@@ -5,6 +5,10 @@ plugins {
 
 group 'com.dishes.ui'
 
+node {
+    pnpmVersion = '10.12.4'
+}
+
 tasks.register('pnpmBuild', PnpmTask) {
     group = 'build'
     description = 'Build the UI project using pnpm'
@@ -20,7 +24,7 @@ tasks.register('pnpmBuild', PnpmTask) {
 tasks.register('pnpmCheck', PnpmTask) {
     group = 'verification'
     description = 'Run unit tests for the UI project using pnpm'
-    args = ['test:unit']
+    args = ['test:unit', '--run']
     dependsOn tasks.named('pnpmInstall')
 }
 

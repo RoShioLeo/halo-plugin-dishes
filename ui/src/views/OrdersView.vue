@@ -263,7 +263,7 @@ watch(
   <div class="orders-page :uno: p-4">
     <VCard class="orders-main-card" :body-class="[':uno: !p-0']">
       <template #header>
-        <div class=":uno: block w-full bg-gray-50 px-4 py-3">
+        <div class="orders-toolbar :uno: block w-full px-4 py-4">
           <div class=":uno: flex flex-wrap items-end justify-between gap-3">
             <div class=":uno: flex flex-wrap items-end gap-3">
               <div>
@@ -389,11 +389,11 @@ watch(
 
 <style scoped>
 .orders-page :deep(.halo-card) {
-  border-radius: 12px;
+  border-radius: 8px;
 }
 
 .orders-main-card {
-  box-shadow: 0 4px 18px rgb(15 23 42 / 0.06);
+  box-shadow: none;
 }
 
 .orders-main-card :deep(.card-header),
@@ -401,11 +401,15 @@ watch(
   padding: 0;
 }
 
+.orders-toolbar {
+  background: var(--ls-dishes-soft, #f7f7f8);
+}
+
 .orders-label {
   margin-bottom: 0.25rem;
   font-size: 0.875rem;
   font-weight: 500;
-  color: rgb(63 63 70);
+  color: var(--ls-dishes-ink, #29292e);
 }
 
 .orders-input {
@@ -414,6 +418,9 @@ watch(
   border-radius: 6px;
   padding: 0 0.75rem;
   font-size: 0.875rem;
+  border-color: var(--ls-dishes-line, #e8e8eb);
+  background: var(--ls-dishes-surface, #fff);
+  color: var(--ls-dishes-ink, #29292e);
 }
 
 .orders-search-btn {
@@ -424,7 +431,7 @@ watch(
 
 .orders-meta {
   font-size: 0.875rem;
-  color: rgb(113 113 122);
+  color: var(--ls-dishes-muted, #6b6b75);
 }
 
 .orders-error {
@@ -439,42 +446,40 @@ watch(
 
 .orders-loading {
   padding: 1.25rem 0;
-  color: rgb(113 113 122);
+  color: var(--ls-dishes-muted, #6b6b75);
   font-size: 0.875rem;
 }
 
 .orders-day-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
+  gap: 16px;
 }
 
 .orders-day-card {
-  border: 1px solid rgb(228 228 231);
-  border-radius: 10px;
-  background: white;
+  border: 1px solid var(--ls-dishes-line, #e8e8eb);
+  border-radius: 8px;
+  background: var(--ls-dishes-surface, #fff);
   overflow: hidden;
 }
 
 .orders-day-card--scheduled {
-  border-color: rgb(251 191 36);
-  box-shadow: 0 0 0 1px rgb(251 191 36 / 0.35) inset;
-  background: linear-gradient(180deg, rgb(255 251 235) 0%, #fff 45%);
+  border-inline-start: 4px solid var(--ls-dishes-highlight, #e7b63e);
 }
 
 .orders-day-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid rgb(244 244 245);
-  background: rgb(250 250 250);
+  padding: 16px;
+  border-bottom: 1px solid var(--ls-dishes-line, #e8e8eb);
+  background: var(--ls-dishes-soft, #f7f7f8);
 }
 
 .orders-day-date {
   font-size: 0.95rem;
   font-weight: 600;
-  color: rgb(24 24 27);
+  color: var(--ls-dishes-ink, #29292e);
 }
 
 .orders-day-date-wrap {
@@ -489,17 +494,16 @@ watch(
   justify-content: center;
   height: 1.25rem;
   padding: 0 0.5rem;
-  border-radius: 999px;
+  border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 600;
-  color: rgb(146 64 14);
-  background: rgb(254 243 199);
-  border: 1px solid rgb(252 211 77);
+  color: var(--ls-dishes-gold, #946d12);
+  background: var(--ls-dishes-gold-soft, #fff8e5);
 }
 
 .orders-day-count {
   font-size: 0.8125rem;
-  color: rgb(113 113 122);
+  color: var(--ls-dishes-muted, #6b6b75);
 }
 
 .orders-period-grid {
@@ -510,7 +514,7 @@ watch(
 
 .orders-period-col {
   padding: 1rem;
-  border-right: 1px solid rgb(244 244 245);
+  border-right: 1px solid var(--ls-dishes-line, #e8e8eb);
 }
 
 .orders-period-col:last-child {
@@ -519,20 +523,20 @@ watch(
 
 .orders-period-title {
   font-size: 0.8125rem;
-  color: rgb(113 113 122);
+  color: var(--ls-dishes-muted, #6b6b75);
   margin-bottom: 0.5rem;
 }
 
 .orders-period-value {
   font-size: 1rem;
   font-weight: 600;
-  color: rgb(39 39 42);
+  color: var(--ls-dishes-ink, #29292e);
   margin-bottom: 0.5rem;
 }
 
 .orders-period-empty {
   font-size: 0.875rem;
-  color: rgb(161 161 170);
+  color: var(--ls-dishes-muted, #6b6b75);
 }
 
 .orders-modal-body {
@@ -549,7 +553,7 @@ watch(
 }
 
 .orders-detail-label {
-  color: rgb(113 113 122);
+  color: var(--ls-dishes-muted, #6b6b75);
 }
 
 .orders-detail-table {
@@ -560,7 +564,7 @@ watch(
 
 .orders-detail-table thead tr {
   border-bottom: 1px solid rgb(228 228 231);
-  color: rgb(113 113 122);
+  color: var(--ls-dishes-muted, #6b6b75);
 }
 
 .orders-detail-table th,
@@ -575,7 +579,7 @@ watch(
 
 .orders-detail-empty {
   text-align: center;
-  color: rgb(161 161 170);
+  color: var(--ls-dishes-muted, #6b6b75);
   padding: 1rem 0;
 }
 
@@ -599,7 +603,7 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgb(113 113 122);
+  color: var(--ls-dishes-muted, #6b6b75);
   font-size: 0.75rem;
   font-weight: 600;
 }
@@ -622,7 +626,7 @@ watch(
 
   .orders-period-col {
     border-right: none;
-    border-bottom: 1px solid rgb(244 244 245);
+    border-bottom: 1px solid var(--ls-dishes-line, #e8e8eb);
   }
 
   .orders-period-col:last-child {

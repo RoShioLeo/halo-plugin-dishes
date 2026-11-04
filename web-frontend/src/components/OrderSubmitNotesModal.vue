@@ -160,13 +160,13 @@ onUnmounted(() => {
           >
             <div class="osm-handle mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-slate-200/90 sm:hidden" />
 
-            <header class="shrink-0 border-b border-slate-100 px-4 pb-3 pt-3 sm:pt-4">
-              <div class="flex items-start justify-between gap-3">
+            <header class="shrink-0 border-b border-slate-100 px-4 pb-4 pt-4 sm:pt-4">
+              <div class="flex items-start justify-between gap-4">
                 <div class="min-w-0">
                   <p class="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
                     确认提交
                   </p>
-                  <h2 id="osm-title" class="mt-0.5 text-base font-semibold tracking-tight text-slate-900">
+                  <h2 id="osm-title" class="mt-1 text-base font-semibold tracking-tight text-slate-900">
                     {{ mealPeriodLabel ? `${mealPeriodLabel} · 备注` : '菜品备注' }}
                   </h2>
                   <p class="mt-1 text-xs leading-relaxed text-slate-500">
@@ -187,12 +187,12 @@ onUnmounted(() => {
               </div>
             </header>
 
-            <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 [-webkit-overflow-scrolling:touch]">
+            <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 [-webkit-overflow-scrolling:touch]">
               <Transition name="osm-step" mode="out-in">
-                <div v-if="outcome !== 'success'" key="form" class="space-y-3">
+                <div v-if="outcome !== 'success'" key="form" class="space-y-4">
                   <p
                     v-if="outcome === 'error' && errorMessage"
-                    class="rounded-lg border border-red-100 bg-red-50/90 px-3 py-2 text-xs text-red-700"
+                    class="rounded-lg border border-red-100 bg-red-50/90 px-4 py-2 text-xs text-red-700"
                   >
                     {{ errorMessage }}
                   </p>
@@ -200,9 +200,9 @@ onUnmounted(() => {
                   <div
                     v-for="l in lines"
                     :key="l.id"
-                    class="rounded-xl border border-slate-100 bg-slate-50/50 p-3 shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
+                    class="rounded-xl border border-slate-100 bg-slate-50/50 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
                   >
-                    <div class="mb-2 flex items-center gap-2.5">
+                    <div class="mb-2 flex items-center gap-2">
                       <div
                         class="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200/70"
                       >
@@ -230,7 +230,7 @@ onUnmounted(() => {
                         v-model="draft[l.id]"
                         :maxlength="NOTE_MAX"
                         rows="2"
-                        class="osm-textarea w-full resize-none rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[13px] leading-snug text-slate-800 placeholder:text-slate-400 focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        class="osm-textarea w-full resize-none rounded-lg border border-slate-200 bg-white px-2 py-2 text-[13px] leading-snug text-slate-800 placeholder:text-slate-400 focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                         placeholder="如：少盐、不要香菜…"
                         :disabled="loading"
                       />
@@ -244,7 +244,7 @@ onUnmounted(() => {
                 <div
                   v-else
                   key="success"
-                  class="flex flex-col items-center justify-center gap-3 py-14 text-center"
+                  class="flex flex-col items-center justify-center gap-4 py-14 text-center"
                 >
                   <div
                     class="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200/80"
@@ -271,12 +271,12 @@ onUnmounted(() => {
 
             <footer
               v-if="outcome !== 'success'"
-              class="shrink-0 border-t border-slate-100 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]"
+              class="shrink-0 border-t border-slate-100 bg-white px-4 py-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]"
             >
               <div class="flex gap-2">
                 <button
                   type="button"
-                  class="flex h-11 min-w-0 flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  class="flex h-12 min-w-0 flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   :disabled="loading"
                   @click="close"
                 >
@@ -284,7 +284,7 @@ onUnmounted(() => {
                 </button>
                 <button
                   type="button"
-                  class="flex h-11 min-w-0 flex-[1.2] items-center justify-center gap-2 rounded-lg bg-blue-600 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  class="flex h-12 min-w-0 flex-[1.2] items-center justify-center gap-2 rounded-lg bg-blue-600 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                   :disabled="loading || !lines.length"
                   @click="onConfirm"
                 >

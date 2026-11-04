@@ -640,8 +640,8 @@ watch(
       <div class="dishes-main-column">
         <VCard class="dishes-main-card" :body-class="[':uno: !p-0']">
           <template #header>
-            <div class=":uno: block w-full bg-gray-50 px-4 py-3">
-              <div class=":uno: flex items-center justify-between gap-3">
+            <div class="dishes-toolbar :uno: block w-full px-4 py-4">
+              <div class="dishes-toolbar-row :uno: flex items-center justify-between gap-4">
                 <div class=":uno: flex items-center gap-2 box-border border border-gray-300 rounded-base">
                   <input
                     v-model="q"
@@ -650,7 +650,7 @@ watch(
                   />
                 </div>
 
-                <div class=":uno: flex items-center gap-2">
+                <div class="dishes-toolbar-actions :uno: flex items-center gap-2">
                   <VDropdown>
                     <VButton size="sm" type="secondary" class="toolbar-btn">{{ filterAvailableLabel }}</VButton>
                     <template #popper>
@@ -715,7 +715,7 @@ watch(
                   <col class=":uno: w-24" />
                   <col class=":uno: w-40" />
                 </colgroup>
-                <thead class=":uno: border-y border-gray-200 bg-gray-50 text-sm text-gray-600 font-semibold">
+                <thead class="dishes-table-head :uno: border-y border-gray-200 bg-gray-50 text-sm text-gray-600 font-semibold">
                   <tr>
                     <th class=":uno: px-3 py-2 text-left">
                       <input v-model="checkedAll" type="checkbox" @change="handleCheckAllChange" />
@@ -746,16 +746,16 @@ watch(
                           <span class="dish-thumb__letter">{{ d.name.slice(0, 1) }}</span>
                         </div>
                         <div class=":uno: min-w-0">
-                          <p class=":uno: truncate text-sm text-gray-800 font-medium">{{ d.name }}</p>
-                          <p class=":uno: text-xs text-gray-400">ID {{ d.id }}</p>
+                          <p class="dish-name :uno: truncate text-sm font-medium">{{ d.name }}</p>
+                          <p class="dish-meta :uno: text-xs">ID {{ d.id }}</p>
                         </div>
                       </div>
                     </td>
-                    <td class=":uno: px-3 py-3 text-gray-600">{{ d.categoryName }}</td>
+                    <td class="dish-meta :uno: px-3 py-3">{{ d.categoryName }}</td>
                     <td class=":uno: px-3 py-3 text-amber-500 tracking-wide">
                       {{ '★'.repeat(Math.max(1, Math.min(5, d.recommendationLevel || 1))) }}
                     </td>
-                    <td class=":uno: px-3 py-3 text-gray-600">{{ periodNames(d.mealPeriodIds) }}</td>
+                    <td class="dish-meta :uno: px-3 py-3">{{ periodNames(d.mealPeriodIds) }}</td>
                     <td class=":uno: px-3 py-3">
                       <VSwitch
                         :model-value="d.isAvailable"
@@ -792,15 +792,15 @@ watch(
   display: flex;
   flex-flow: row nowrap;
   align-items: flex-start;
-  gap: 0.75rem;
+  gap: 16px;
   width: 100%;
   box-sizing: border-box;
 }
 
 .dishes-sidebar {
-  flex: 0 0 17rem;
-  width: 17rem;
-  max-width: 17rem;
+  flex: 0 0 256px;
+  width: 256px;
+  max-width: 256px;
   min-width: 0;
   box-sizing: border-box;
 }
@@ -812,15 +812,15 @@ watch(
 }
 
 .dishes-page :deep(.halo-card) {
-  border-radius: 12px;
+  border-radius: 8px;
 }
 
 .dishes-sidebar :deep(.halo-card) {
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+  box-shadow: none;
 }
 
 .dishes-main-card {
-  box-shadow: 0 4px 18px rgb(15 23 42 / 0.06);
+  box-shadow: none;
 }
 
 .dishes-main-card :deep(.card-header),
@@ -829,7 +829,7 @@ watch(
 }
 
 .toolbar-btn {
-  border-radius: 4px;
+  border-radius: 8px;
   font-weight: 500;
 }
 
@@ -847,8 +847,8 @@ watch(
   height: 48px;
   border-radius: 8px;
   overflow: hidden;
-  background: rgb(244 244 245);
-  border: 1px solid rgb(228 228 231);
+  background: var(--ls-dishes-soft, #f7f7f8);
+  border: 1px solid var(--ls-dishes-line, #e8e8eb);
   box-sizing: border-box;
 }
 
@@ -869,7 +869,47 @@ watch(
 .dish-thumb__letter {
   font-size: 0.875rem;
   font-weight: 600;
-  color: rgb(113 113 122);
+  color: var(--ls-dishes-muted, #6b6b75);
   line-height: 1;
+}
+
+.dishes-toolbar {
+  background: var(--ls-dishes-soft, #f7f7f8);
+}
+
+.dishes-table-head {
+  background: var(--ls-dishes-soft, #f7f7f8);
+  border-color: var(--ls-dishes-line, #e8e8eb);
+  color: var(--ls-dishes-muted, #6b6b75);
+}
+
+.dish-name {
+  color: var(--ls-dishes-ink, #29292e);
+}
+
+.dish-meta {
+  color: var(--ls-dishes-muted, #6b6b75);
+}
+
+.dish-row:hover {
+  background: var(--ls-dishes-soft, #f7f7f8);
+}
+
+.dishes-toolbar-row,
+.dishes-toolbar-actions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1023px) {
+  .dishes-layout {
+    flex-direction: column;
+  }
+
+  .dishes-sidebar,
+  .dishes-main-column {
+    flex: 0 1 auto;
+    width: 100%;
+    max-width: 100%;
+  }
 }
 </style>

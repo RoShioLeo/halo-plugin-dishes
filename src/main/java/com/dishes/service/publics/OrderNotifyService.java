@@ -108,7 +108,7 @@ public class OrderNotifyService {
         if (!configured.isBlank()) {
             return toAbsoluteUrl(origin, request.getURI().getScheme(), configured);
         }
-        return origin + "/plugins/dishes/static/dishes-frontend/assets/logo.png";
+        return origin + "/plugins/dishes/assets/dishes-frontend/logo.png";
     }
 
     private String toAbsoluteUrl(String origin, String scheme, String rawUrl) {

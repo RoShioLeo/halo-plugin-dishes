@@ -7,7 +7,7 @@ import { resolveMediaUrl } from '@/utils/mediaUrl'
 import { dishRecommendationLevel, stars } from '@/utils/recommendationDisplay'
 import { getPublicBrandSubtitle, getPublicBrandTitle } from '@/utils/publicBranding'
 import HomeOrderFab from '@/components/HomeOrderFab.vue'
-import headerLogoUrl from '@/assets/logo.png'
+import headerLogoUrl from '@/assets/lemon.svg'
 
 const router = useRouter()
 
@@ -236,9 +236,9 @@ function readExhausted(ymd: string, period: string): boolean {
 }
 
 function exhaustedMessage(period: PeriodCode): string {
-  if (period === 'breakfast') return '今天早上别吃了，滚'
-  if (period === 'lunch') return '今天中午别吃了，滚'
-  return '今天晚上别吃了，滚'
+  if (period === 'breakfast') return '早餐推荐已经看完啦，去菜谱里再挑挑吧。'
+  if (period === 'lunch') return '午餐推荐已经看完啦，去菜谱里再挑挑吧。'
+  return '晚餐推荐已经看完啦，去菜谱里再挑挑吧。'
 }
 
 function saveRecState(code: PeriodCode) {
@@ -594,7 +594,7 @@ onUnmounted(() => {
       class="home-header sticky top-0 z-10 shrink-0 bg-slate-50 supports-[backdrop-filter]:backdrop-blur-sm"
     >
       <div
-        class="flex items-center gap-3 border-b border-slate-200/90 bg-white/95 px-4 py-3 backdrop-blur-sm"
+        class="ls-brand"
       >
         <img
           :src="headerAvatarUrl"
@@ -602,15 +602,15 @@ onUnmounted(() => {
           width="40"
           height="40"
           decoding="async"
-          class="home-hero__avatar h-10 w-10 shrink-0 rounded-xl object-cover shadow-inner ring-1 ring-slate-200/80"
+          class="ls-brand__logo"
         />
 
         <div class="min-w-0 flex-1">
-          
-          <h1 class="text-[15px] font-semibold leading-tight tracking-tight text-slate-900">
+          <p class="ls-brand__kicker">LEMONSLICE CLOUD</p>
+          <h1>
             {{ publicBrandTitle }}
           </h1>
-          <p class="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-500">
+          <p class="ls-brand__subtitle">
             {{ publicBrandSubtitle }}
           </p>
         </div>
@@ -618,7 +618,7 @@ onUnmounted(() => {
     </header>
 
     <div
-      class="home-body flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 pt-4 [-webkit-overflow-scrolling:touch]"
+      class="home-body flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pt-4 [-webkit-overflow-scrolling:touch]"
     >
       <!-- 错误 -->
       <div
@@ -630,7 +630,7 @@ onUnmounted(() => {
         </p>
         <button
           type="button"
-          class="home-btn home-btn--primary mt-3"
+          class="home-btn home-btn--primary mt-4"
           @click="load"
         >
           重试
@@ -640,23 +640,23 @@ onUnmounted(() => {
       <!-- 骨架 -->
       <div
         v-if="loading"
-        class="home-skeleton flex flex-col gap-5"
+        class="home-skeleton flex flex-col gap-4"
         aria-busy="true"
       >
         <div class="home-card overflow-hidden p-4">
-          <div class="mb-4 flex items-end justify-between gap-3">
+          <div class="mb-4 flex items-end justify-between gap-4">
             <div class="h-6 w-24 animate-pulse rounded-md bg-slate-100" />
             <div class="h-5 w-16 animate-pulse rounded bg-slate-100" />
           </div>
-          <div class="h-11 animate-pulse rounded-xl bg-slate-100" />
-          <div class="mt-4 space-y-2.5">
+          <div class="h-12 animate-pulse rounded-xl bg-slate-100" />
+          <div class="mt-4 space-y-2">
             <div
               v-for="n in 3"
               :key="n"
-              class="flex gap-3 rounded-lg border border-slate-100 p-2.5"
+              class="flex gap-4 rounded-lg border border-slate-100 p-2"
             >
               <div class="h-12 w-12 shrink-0 animate-pulse rounded-md bg-slate-100" />
-              <div class="min-w-0 flex-1 space-y-2 py-0.5">
+              <div class="min-w-0 flex-1 space-y-2 py-1">
                 <div class="h-3.5 w-3/4 animate-pulse rounded bg-slate-100" />
                 <div class="h-3 w-1/3 animate-pulse rounded bg-slate-100" />
               </div>
@@ -664,7 +664,7 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="home-card p-4">
-          <div class="mb-3 flex justify-between gap-3">
+          <div class="mb-4 flex justify-between gap-4">
             <div class="h-5 w-28 animate-pulse rounded bg-slate-100" />
             <div class="h-8 w-16 animate-pulse rounded-lg bg-slate-100" />
           </div>
@@ -674,10 +674,10 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="home-card p-4">
-          <div class="mb-3 h-4 w-20 animate-pulse rounded bg-slate-100" />
+          <div class="mb-4 h-4 w-20 animate-pulse rounded bg-slate-100" />
           <div class="space-y-2">
-            <div class="h-11 animate-pulse rounded-xl bg-slate-100" />
-            <div class="h-11 animate-pulse rounded-xl bg-slate-100" />
+            <div class="h-12 animate-pulse rounded-xl bg-slate-100" />
+            <div class="h-12 animate-pulse rounded-xl bg-slate-100" />
           </div>
         </div>
       </div>
@@ -686,7 +686,7 @@ onUnmounted(() => {
         <!-- 今日点餐 -->
         <section class="home-card home-card--today overflow-hidden">
           <div class="home-card__head px-4 pb-1 pt-4">
-            <div class="flex items-end justify-between gap-3">
+            <div class="flex items-end justify-between gap-4">
               <div>
                 <p class="home-eyebrow">
                   今日餐品
@@ -705,7 +705,7 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div class="px-3 pb-3 pt-1">
+          <div class="px-4 pb-4 pt-1">
             <div
               class="home-period-seg relative rounded-xl bg-slate-100/95 p-1"
               role="tablist"
@@ -719,7 +719,7 @@ onUnmounted(() => {
                 class="home-period-seg__glider pointer-events-none absolute z-0 rounded-lg bg-white shadow-[0_1px_2px_rgba(15,23,42,0.05)] ring-1 ring-slate-200/70"
                 aria-hidden="true"
               />
-              <div class="relative z-[1] flex gap-2.5">
+              <div class="relative z-[1] flex gap-2">
                 <button
                   v-for="row in today.periods"
                   :key="row.meal_period.code"
@@ -738,7 +738,7 @@ onUnmounted(() => {
                     {{ row.meal_period.name }}
                   </span>
                   <span
-                    class="relative z-[1] mt-0.5 block text-[10px] leading-tight text-slate-400"
+                    class="relative z-[1] mt-1 block text-[10px] leading-tight text-slate-400"
                   >
                     <template v-if="clockPeriod === row.meal_period.code">此刻 · </template>
                     {{ row.order ? `已点 ${row.order.item_count} 样` : '未点' }}
@@ -753,7 +753,7 @@ onUnmounted(() => {
             aria-hidden="true"
           />
 
-          <div class="px-3 pb-4 pt-3 sm:px-4">
+          <div class="px-4 pb-4 pt-4 sm:px-4">
             <Transition name="home-period-swap" mode="out-in">
               <div :key="selectedPeriod" class="min-h-[3rem]">
                 <ul
@@ -766,7 +766,7 @@ onUnmounted(() => {
                     :key="it.line_id"
                   >
                     <div
-                      class="home-order-row relative min-h-[3.75rem] rounded-lg border border-slate-100 bg-white py-2 pl-2.5 pr-[6rem] shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow] duration-200 ease-out hover:border-slate-200 hover:shadow-[0_2px_8px_-2px_rgba(15,23,42,0.06)]"
+                      class="home-order-row relative min-h-[3.75rem] rounded-lg border border-slate-100 bg-white py-2 pl-2 pr-[6rem] shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow] duration-200 ease-out hover:border-slate-200 hover:shadow-[0_2px_8px_-2px_rgba(15,23,42,0.06)]"
                     >
                       <span
                         class="home-meal-pill"
@@ -778,7 +778,7 @@ onUnmounted(() => {
                       >
                         {{ mealPeriodEndedForSelected ? '已流转至胃部' : '食材准备中…' }}
                       </span>
-                      <div class="flex min-w-0 items-center gap-3">
+                      <div class="flex min-w-0 items-center gap-4">
                         <div
                           class="home-thumb h-12 w-12 shrink-0 overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200/60"
                         >
@@ -791,7 +791,7 @@ onUnmounted(() => {
                             decoding="async"
                           />
                         </div>
-                        <p class="min-w-0 flex-1 truncate pb-1 pt-0.5 text-[15px] font-medium leading-snug text-slate-900">
+                        <p class="min-w-0 flex-1 truncate pb-1 pt-1 text-[15px] font-medium leading-snug text-slate-900">
                           {{ it.dish.name }}
                         </p>
                       </div>
@@ -819,7 +819,7 @@ onUnmounted(() => {
 
         <!-- 今日推荐 -->
         <section class="home-card home-card--rec overflow-hidden">
-          <div class="flex items-start justify-between gap-3 px-4 pb-2 pt-4">
+          <div class="flex items-start justify-between gap-4 px-4 pb-2 pt-4">
             <div class="min-w-0">
               <p class="home-eyebrow">
                 厨师长精选
@@ -834,13 +834,13 @@ onUnmounted(() => {
               </p>
             </div>
             <div
-              class="mt-0.5 inline-flex shrink-0 items-center rounded-full bg-slate-100 p-0.5 text-[11px] text-slate-600 ring-1 ring-slate-200/70"
+              class="mt-1 inline-flex shrink-0 items-center rounded-full bg-slate-100 p-1 text-[11px] text-slate-600 ring-1 ring-slate-200/70"
               role="tablist"
               aria-label="推荐餐段"
             >
               <button
                 type="button"
-                class="rounded-full px-2 py-0.5 font-medium transition-colors"
+                class="rounded-full px-2 py-1 font-medium transition-colors"
                 :class="recPeriod === 'breakfast' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'"
                 @click="onRecPeriodSelect('breakfast')"
               >
@@ -848,7 +848,7 @@ onUnmounted(() => {
               </button>
               <button
                 type="button"
-                class="rounded-full px-2 py-0.5 font-medium transition-colors"
+                class="rounded-full px-2 py-1 font-medium transition-colors"
                 :class="recPeriod === 'lunch' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'"
                 @click="onRecPeriodSelect('lunch')"
               >
@@ -856,7 +856,7 @@ onUnmounted(() => {
               </button>
               <button
                 type="button"
-                class="rounded-full px-2 py-0.5 font-medium transition-colors"
+                class="rounded-full px-2 py-1 font-medium transition-colors"
                 :class="recPeriod === 'dinner' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'"
                 @click="onRecPeriodSelect('dinner')"
               >
@@ -865,7 +865,7 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div class="px-3 pb-4 pt-0 sm:px-4">
+          <div class="px-4 pb-4 pt-0 sm:px-4">
             <Transition name="home-board-swap" mode="out-in">
               <div :key="boardKey" class="relative">
                 <template v-if="!recStarted && !loading && !recExhausted">
@@ -874,7 +874,7 @@ onUnmounted(() => {
                     :aria-busy="shuffling"
                   >
                     <template v-if="shuffling">
-                      <div class="mb-3 flex items-center justify-between gap-3">
+                      <div class="mb-4 flex items-center justify-between gap-4">
                         <div class="h-4 w-28 animate-pulse rounded bg-slate-100" />
                         <div class="h-4 w-16 animate-pulse rounded bg-slate-100" />
                       </div>
@@ -882,10 +882,10 @@ onUnmounted(() => {
                         <li
                           v-for="n in 5"
                           :key="n"
-                          class="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/40 p-2"
+                          class="flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50/40 p-2"
                         >
-                          <div class="h-11 w-11 shrink-0 animate-pulse rounded-md bg-slate-100 ring-1 ring-slate-200/60" />
-                          <div class="min-w-0 flex-1 space-y-2 py-0.5">
+                          <div class="h-12 w-11 shrink-0 animate-pulse rounded-md bg-slate-100 ring-1 ring-slate-200/60" />
+                          <div class="min-w-0 flex-1 space-y-2 py-1">
                             <div class="h-3.5 w-3/4 animate-pulse rounded bg-slate-100" />
                             <div class="h-3 w-1/3 animate-pulse rounded bg-slate-100" />
                           </div>
@@ -925,7 +925,7 @@ onUnmounted(() => {
                   <div
                     class="home-rec-list min-h-[12rem] w-full items-stretch overflow-hidden rounded-xl border border-slate-200/80 bg-white p-2"
                   >
-                    <div class="rounded-lg p-0.5">
+                    <div class="rounded-lg p-1">
                       <TransitionGroup
                         v-if="recList.length"
                         name="home-rec-cards"
@@ -938,9 +938,9 @@ onUnmounted(() => {
                           :key="d.dish_id"
                           class="group rounded-xl border border-slate-100 bg-slate-50/40 p-2 transition-[border-color,background-color,transform] duration-200 ease-out hover:border-slate-200 hover:bg-white motion-safe:hover:-translate-y-[1px]"
                         >
-                          <div class="flex items-center gap-3">
+                          <div class="flex items-center gap-4">
                             <div
-                              class="home-thumb h-11 w-11 shrink-0 overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200/60"
+                              class="home-thumb h-12 w-11 shrink-0 overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200/60"
                             >
                               <img
                                 v-if="d.image_url"
@@ -951,7 +951,7 @@ onUnmounted(() => {
                                 decoding="async"
                               />
                             </div>
-                            <div class="min-w-0 flex-1 py-0.5">
+                            <div class="min-w-0 flex-1 py-1">
                               <div class="flex items-start justify-between gap-2">
                                 <p class="min-w-0 truncate text-[15px] font-medium leading-tight text-slate-900">
                                   {{ d.name }}
@@ -963,7 +963,7 @@ onUnmounted(() => {
                                   {{ stars(dishRecommendationLevel(d)) }}
                                 </p>
                               </div>
-                              <div class="mt-0.5 sm:mt-0">
+                              <div class="mt-1 sm:mt-0">
                                 <div class="relative">
                                   <p
                                     v-if="d.category_name"
@@ -1035,10 +1035,10 @@ onUnmounted(() => {
             </p>
           </div>
 
-          <div class="px-3 pb-4 pt-0 sm:px-4">
+          <div class="px-4 pb-4 pt-0 sm:px-4">
             <div
               v-if="reservationsLoading"
-              class="space-y-2.5"
+              class="space-y-2"
               aria-busy="true"
             >
               <div
@@ -1091,12 +1091,12 @@ onUnmounted(() => {
               >
                 <button
                   type="button"
-                  class="reserve-acc__trigger flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-white/80"
+                  class="reserve-acc__trigger flex w-full items-center gap-4 px-4 py-4 text-left transition-colors hover:bg-white/80"
                   :aria-expanded="isReserveDateExpanded(g.date)"
                   @click="toggleReserveDate(g.date)"
                 >
-                  <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <div class="flex min-w-0 flex-1 flex-col gap-1">
+                    <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                       <span class="text-[15px] font-semibold tracking-tight text-slate-900">
                         {{ g.label }}
                       </span>
@@ -1109,7 +1109,7 @@ onUnmounted(() => {
                     </span>
                   </div>
                   <span
-                    class="reserve-acc__badge shrink-0 rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold tabular-nums text-slate-600 ring-1 ring-slate-200/80"
+                    class="reserve-acc__badge shrink-0 rounded-full bg-white px-2 py-1 text-[11px] font-semibold tabular-nums text-slate-600 ring-1 ring-slate-200/80"
                   >
                     {{ g.lines.length }}
                   </span>
@@ -1130,13 +1130,13 @@ onUnmounted(() => {
                   :class="{ 'reserve-acc__panel--open': isReserveDateExpanded(g.date) }"
                 >
                   <div class="reserve-acc__inner border-t border-slate-100/90 bg-white/90">
-                    <ul class="flex flex-col gap-1.5 p-2.5" role="list">
+                    <ul class="flex flex-col gap-2 p-2" role="list">
                       <li
                         v-for="line in g.lines"
                         :key="`${g.date}-${line.dish_id}`"
                       >
                         <div
-                          class="flex items-center gap-3 rounded-lg border border-slate-100/90 bg-slate-50/30 px-2 py-2"
+                          class="flex items-center gap-4 rounded-lg border border-slate-100/90 bg-slate-50/30 px-2 py-2"
                         >
                           <div
                             class="home-thumb h-10 w-10 shrink-0 overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200/60"
@@ -1156,13 +1156,13 @@ onUnmounted(() => {
                             </p>
                             <p
                               v-if="line.note"
-                              class="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-500"
+                              class="mt-1 line-clamp-2 text-[11px] leading-snug text-slate-500"
                             >
                               {{ line.note }}
                             </p>
                           </div>
                           <span
-                            class="shrink-0 rounded-md bg-white px-2 py-0.5 text-[11px] font-bold tabular-nums text-slate-600 ring-1 ring-slate-200/70"
+                            class="shrink-0 rounded-md bg-white px-2 py-1 text-[11px] font-bold tabular-nums text-slate-600 ring-1 ring-slate-200/70"
                           >
                             ×{{ line.qty }}
                           </span>
@@ -1178,6 +1178,11 @@ onUnmounted(() => {
 
         
       </template>
+      <footer class="ls-source-credit">
+        LemonSlice edition · 基于
+        <a href="https://github.com/Avrinbai/halo-plugin-dishes" target="_blank" rel="noopener noreferrer">Dishes</a>
+        · <a href="https://github.com/RoShioLeo/halo-plugin-dishes" target="_blank" rel="noopener noreferrer">源码 · GPL-3.0</a>
+      </footer>
     </div>
 
     <HomeOrderFab />
@@ -1231,8 +1236,8 @@ onUnmounted(() => {
 
 .home-card {
   border-radius: 1rem;
-  border: 1px solid rgb(226 232 240 / 0.9);
-  background: #fff;
+  border: 1px solid var(--ls-line);
+  background: var(--ls-paper);
   box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
 }
 
@@ -1245,7 +1250,7 @@ onUnmounted(() => {
   font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: -0.02em;
-  color: rgb(15 23 42);
+  color: var(--ls-ink);
 }
 
 .home-eyebrow {
@@ -1253,21 +1258,21 @@ onUnmounted(() => {
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgb(148 163 184);
+  color: var(--ls-faint);
 }
 
 .home-date-pill {
   border-radius: 0.5rem;
-  border: 1px solid rgb(226 232 240);
-  background: rgb(248 250 252);
+  border: 1px solid var(--ls-line);
+  background: var(--ls-soft);
   padding: 0.25rem 0.5rem;
   font-size: 12px;
   font-weight: 500;
-  color: rgb(100 116 139);
+  color: var(--ls-muted);
 }
 
 .home-muted {
-  color: rgb(148 163 184);
+  color: var(--ls-faint);
 }
 
 /* 今日已选：餐段状态胶囊（右上）+ 份数角标（右下） */
@@ -1293,15 +1298,15 @@ onUnmounted(() => {
 }
 
 .home-meal-pill--prep {
-  border: 1px solid rgb(226 232 240);
-  background: rgb(248 250 252);
-  color: rgb(100 116 139);
+  border: 1px solid var(--ls-line);
+  background: var(--ls-soft);
+  color: var(--ls-muted);
 }
 
 .home-meal-pill--done {
-  border: 1px solid rgb(167 243 208);
-  background: rgb(236 253 245);
-  color: rgb(21 128 61);
+  border: 1px solid var(--ls-success-line);
+  background: var(--ls-success-soft);
+  color: var(--ls-success);
 }
 
 .home-order-qty {
@@ -1316,8 +1321,8 @@ onUnmounted(() => {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
-  color: rgb(71 85 105);
-  background: rgb(241 245 249);
+  color: var(--ls-muted);
+  background: var(--ls-hover);
 }
 
 /* —— 按钮 —— */
@@ -1337,19 +1342,19 @@ onUnmounted(() => {
 }
 
 .home-btn:focus-visible {
-  outline: 2px solid rgb(59 130 246 / 0.35);
+  outline: 2px solid var(--ls-accent-line);
   outline-offset: 2px;
 }
 
 .home-btn--primary {
   min-height: 2.5rem;
   padding: 0 1rem;
-  background: rgb(37 99 235);
+  background: var(--ls-action);
   color: #fff;
 }
 
 .home-btn--primary:hover {
-  background: rgb(29 78 216);
+  background: var(--ls-action-hover);
 }
 
 .home-btn--primary:active {
@@ -1359,14 +1364,14 @@ onUnmounted(() => {
 .home-btn--ghost {
   min-height: 2rem;
   padding: 0.375rem 0.75rem;
-  border: 1px solid rgb(226 232 240);
-  background: #fff;
-  color: rgb(51 65 85);
+  border: 1px solid var(--ls-line);
+  background: var(--ls-paper);
+  color: var(--ls-ink);
 }
 
 .home-btn--ghost:hover:not(:disabled) {
-  border-color: rgb(203 213 225);
-  background: rgb(248 250 252);
+  border-color: var(--ls-input);
+  background: var(--ls-soft);
 }
 
 .home-btn--ghost:disabled {
@@ -1382,7 +1387,7 @@ onUnmounted(() => {
 /* —— 今日 · 餐段分段（--period-i / --seg-n 由内联注入） —— */
 .home-period-seg {
   --seg-pad: 0.25rem;
-  --seg-gap: 0.625rem;
+  --seg-gap: 0.5rem;
   --period-i: 0;
   --seg-n: 3;
 }
@@ -1405,7 +1410,7 @@ onUnmounted(() => {
 }
 
 .home-period-seg__btn:focus-visible {
-  outline: 2px solid rgb(59 130 246 / 0.35);
+  outline: 2px solid var(--ls-accent-line);
   outline-offset: 1px;
   border-radius: 0.5rem;
 }

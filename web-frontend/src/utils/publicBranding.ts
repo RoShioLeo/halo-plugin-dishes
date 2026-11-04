@@ -1,8 +1,8 @@
 /** 与 SiteRouter / dishes.html 中 data-dishes-* 及默认文案保持一致 */
 
-const DEFAULT_SITE_TITLE = '家庭私厨'
-const DEFAULT_BRAND_TITLE = '家庭厨房'
-const DEFAULT_BRAND_SUBTITLE = '没写进菜谱的菜暂时还不会做，技能树还在缓慢增长...'
+const DEFAULT_SITE_TITLE = '柠檬私厨'
+const DEFAULT_BRAND_TITLE = '柠檬私厨'
+const DEFAULT_BRAND_SUBTITLE = '今天，想吃点什么？'
 
 function readRootDataset(): DOMStringMap | undefined {
   try {

@@ -1,0 +1,14 @@
+Remix Icon 4.8.0
+By Remix Design
+https://github.com/Remix-Design/RemixIcon/tree/v4.8.0
+
+Icon data is distributed through @iconify-json/ri 1.2.10.
+The installed icon-set metadata declares the Apache License, Version 2.0.
+The complete upstream license is supplied in remixicon-Apache-2.0.txt.
+
+Used icons: file-list-3-line, restaurant-2-line, settings-3-line.
+The build wraps their original SVG path data in Vue render functions.
+The LemonSlice fork changes presentation, not the SVG path data.
+
+This attribution notice was prepared by the LemonSlice fork on 2026-11-05.
+It is informational and does not modify the upstream license.

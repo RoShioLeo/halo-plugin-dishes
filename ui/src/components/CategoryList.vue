@@ -132,7 +132,7 @@ function handleSorted() {
 
 <style scoped>
 .category-card {
-  box-shadow: 0 4px 16px rgb(15 23 42 / 0.05);
+  box-shadow: none;
   max-width: 100%;
 }
 
@@ -141,7 +141,7 @@ function handleSorted() {
 }
 
 .category-entity:hover {
-  background: #f8fafc;
+  background: var(--ls-dishes-soft, #f7f7f8);
 }
 
 .category-card :deep(table.category-table) {
@@ -153,7 +153,7 @@ function handleSorted() {
 .category-card :deep(.entity-start-wrapper) {
   width: auto;
   vertical-align: middle;
-  padding-right: 6px;
+  padding-right: 8px;
 }
 
 /* 右侧「�」固定宽度，避免再出现大块留白，也不挤压名称 */
@@ -194,7 +194,7 @@ function handleSorted() {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
 }
 
@@ -206,15 +206,15 @@ function handleSorted() {
 .count-badge {
   display: inline-flex;
   align-items: center;
-  background: #e9e9e9;
-    border-radius: 4px;
-    color: #686868;
+  background: var(--ls-dishes-soft, #f7f7f8);
+  border-radius: 4px;
+  color: var(--ls-dishes-muted, #6b6b75);
   font-size: 11px;
-  padding: 2px 8px;
+  padding: 4px 8px;
 }
 
 .new-category-btn {
-  border-radius: 10px;
-  font-weight: 600;
+  border-radius: 8px;
+  font-weight: 500;
 }
 </style>

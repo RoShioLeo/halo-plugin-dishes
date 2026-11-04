@@ -22,9 +22,9 @@ public class SiteRouter {
 
     private static final String DEFAULT_PUBLIC_PATH = "/dishes";
     private static final String DEFAULT_PUBLIC_LOGO_URL = "";
-    private static final String DEFAULT_SITE_TITLE = "家庭私厨";
-    private static final String DEFAULT_BRAND_TITLE = "家庭厨房";
-    private static final String DEFAULT_BRAND_SUBTITLE = "没写进菜谱的菜暂时还不会做，技能树还在缓慢增长...";
+    private static final String DEFAULT_SITE_TITLE = "柠檬私厨";
+    private static final String DEFAULT_BRAND_TITLE = "柠檬私厨";
+    private static final String DEFAULT_BRAND_SUBTITLE = "今天，想吃点什么？";
     private static final AtomicReference<String> CONFIGURED_PUBLIC_PATH = new AtomicReference<>("");
     private static final AtomicReference<String> CONFIGURED_PUBLIC_LOGO_URL = new AtomicReference<>("");
     private static final AtomicReference<String> CONFIGURED_PUBLIC_SITE_TITLE = new AtomicReference<>("");

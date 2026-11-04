@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -32,12 +33,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Enable Corepack (pnpm)
         run: |
           corepack enable
-          corepack prepare pnpm@10 --activate
+          corepack prepare pnpm@10.12.4 --activate
           pnpm --version
 
       - name: Grant execute permission for gradlew
@@ -57,3 +58,11 @@ jobs:
           fi
           echo "Found ${#jars[@]} jar file(s):"
           ls -lh "$JAR_DIR"
+
+      - name: Upload plugin build
+        uses: actions/upload-artifact@v4
+        with:
+          name: lemonslice-dishes
+          path: build/libs/*.jar
+          if-no-files-found: error
+          retention-days: 14

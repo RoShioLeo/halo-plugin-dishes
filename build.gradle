@@ -63,6 +63,22 @@ tasks.named('jar') {
 
 tasks.named('processResources') {
     dependsOn project(':web-frontend').tasks.named('assemble')
+    inputs.dir(project(':web-frontend').layout.projectDirectory.dir('build/dist'))
+    filesMatching('templates/dishes.html') {
+        def assetDigest = java.security.MessageDigest.getInstance('SHA-256')
+        def assetRoot = project(':web-frontend').file('build/dist')
+        ['app.js', 'assets/index.css', 'appearance-init.js', 'lemon.svg'].each { asset ->
+            assetDigest.update(new File(assetRoot, asset).bytes)
+        }
+        def assetVersion = project.version.toString() + '-' + assetDigest.digest().encodeHex().toString().take(12)
+        filter(org.apache.tools.ant.filters.ReplaceTokens,
+            tokens: [pluginVersion: assetVersion])
+    }
+    from('LICENSE') { into 'META-INF' }
+    from('NOTICE.md') { into 'META-INF' }
+    from('CHANGELOG.md') { into 'META-INF' }
+    from('THIRD_PARTY_NOTICES.md') { into 'META-INF' }
+    from('third-party-licenses') { into 'META-INF/third-party-licenses' }
 }
 
 tasks.named('generatePluginComponentsIdx') {

@@ -10,12 +10,12 @@ spec:
   author:
     name: bai
     website: https://avrinbai.cn
-  logo: logo.png
-  homepage: https://github.com/Avrinbai/halo-plugin-dishes#readme
-  repo: https://github.com/Avrinbai/halo-plugin-dishes
-  issues: https://github.com/Avrinbai/halo-plugin-dishes/issues
-  displayName: "家庭私厨"
-  description: "基于halo提供的家庭点菜插件"
+  logo: logo.svg
+  homepage: https://github.com/RoShioLeo/halo-plugin-dishes#readme
+  repo: https://github.com/RoShioLeo/halo-plugin-dishes
+  issues: https://github.com/RoShioLeo/halo-plugin-dishes/issues
+  displayName: "柠檬私厨"
+  description: "LemonSlice 风格的家庭点菜插件，基于 bai 的 Halo Dishes 改造"
   license:
     - name: "GPL-3.0"
-      url: "https://github.com/Avrinbai/halo-plugin-dishes/blob/main/LICENSE"
+      url: "https://github.com/RoShioLeo/halo-plugin-dishes/blob/main/LICENSE"
