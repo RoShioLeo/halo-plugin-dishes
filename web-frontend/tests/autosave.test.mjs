@@ -1,7 +1,35 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createAutosave, createWriteSerial } from '../src/utils/autosave.ts'
+import { createGuestNicknamePreference } from '../src/utils/guestNickname.ts'
+import { ContextDraftStore, draftKey } from '../src/utils/kitchenDraft.ts'
 const deferred = () => { let resolve; const promise = new Promise((done) => { resolve = done }); return { promise, resolve } }
+
+test('the first anonymous autosave includes a default nickname and preserves the restored draft and batch', async () => {
+  const values = new Map()
+  const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) }
+  const store = new ContextDraftStore(() => storage)
+  const context = { date: '2026-11-05', period: 'lunch', batchId: 'current-batch' }
+  const key = draftKey(context.date, context.period, context.batchId)
+  const draft = { revision: 2, items: [{ dishId: 1, name: '番茄汤', quantity: 1, imageUrl: '', note: '', tags: [] }], offMenu: '想吃面条', remark: '不放辣', nickname: '' }
+  store.save(key, draft, 'original baseline', true)
+  const restored = store.load(key).draft
+  const preference = createGuestNicknamePreference(() => storage, () => 0.5)
+  const payloads = []
+  const autosave = createAutosave(async () => {
+    payloads.push({ ...context, ...restored, nickname: preference.resolve('', restored.nickname) })
+  }, 5000)
+  autosave.schedule()
+  await autosave.flush()
+  assert.match(payloads[0].nickname, /^访客\d{4}$/)
+  assert.equal(payloads[0].batchId, context.batchId)
+  assert.equal(payloads[0].revision, 2)
+  assert.equal(payloads[0].offMenu, '想吃面条')
+  assert.equal(payloads[0].remark, '不放辣')
+  assert.deepEqual(payloads[0].items, draft.items)
+  assert.deepEqual(store.load(key).draft, draft)
+  autosave.dispose()
+})
 
 test('rapid changes are coalesced to the latest current draft before a forced flush', async () => {
   let value = 1

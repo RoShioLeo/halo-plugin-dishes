@@ -15,6 +15,7 @@ import KitchenSupplementEditor from '@/components/KitchenSupplementEditor.vue'
 import { createAutosave, createWriteSerial } from '@/utils/autosave'
 import { ContextDraftStore, createRequestTracker, draftContent, draftKey, mealTagNames, isCurrentBatch, canEditSubmitted, updateSavedQuantity, freezeSubmissionPayload, catalogueIncludesDish, canIncreaseCatalogueDish, stockOrdered, isPublicQuantity } from '@/utils/kitchenDraft'
 import type { KitchenDraft } from '@/utils/kitchenDraft'
+import { guestNicknamePreference, normalizeGuestNickname } from '@/utils/guestNickname'
 
 type Draft = KitchenDraft
 const draftStore = new ContextDraftStore(() => window.sessionStorage)
@@ -63,7 +64,7 @@ const shareMessage = ref('')
 const drawerError = ref('')
 const drawerNotice = ref('')
 const drawerWriteFailed = ref(false)
-const guestNickname = ref(readNickname())
+const guestNickname = ref('')
 const actorName = computed(() => kitchenViewer.value?.authenticated ? kitchenViewer.value.displayName : guestNickname.value.trim())
 const validActor = computed(() => !!actorName.value && actorName.value.length <= 32)
 const nicknameOpen = ref(false)
@@ -156,25 +157,26 @@ const currentOrderTotals = computed(() => {
 const submittedGroups = computed(() => (shared.value?.submittedBatches ?? []).map((batch, index) => ({ ...batch, number: index + 1, participants: shared.value?.participants.filter((person) => person.submitted && person.batchId === batch.id) ?? [] })).filter((batch) => batch.participants.length > 0))
 const canPrepareSubmission = computed(() => canEdit.value && !loading.value && !busyInteraction.value && !conflict.value && !batchChanged.value && (activeParticipants.value.length > 0 || dirty.value))
 const draftValid = computed(() => draft.items.length <= 50 && draft.items.every((item) => isPublicQuantity(item.quantity) && item.quantity > 0))
-function readNickname(): string { try { return localStorage.getItem('lemonslice-kitchen-nickname') ?? '' } catch { return '' } }
 function persistDraft() {
   if (!activeKey || !initialized.value || !baseline.value) return
   draftStore.save(activeKey, draft, baseline.value, dirty.value)
 }
 function editorName(order: SharedOrder): string {
-  return actorName.value || order.mine.nickname || readNickname()
+  return actorName.value || order.mine.nickname
 }
 function serverDraft(order: SharedOrder): Draft {
   const source = order.mine
   return { revision: source.revision, items: clone(source.items), offMenu: source.offMenu, remark: source.remark, nickname: editorName(order) }
 }
 function restoreOwnDraft(order: SharedOrder) {
-  const source = serverDraft(order)
-  if (!kitchenViewer.value?.authenticated && !guestNickname.value && order.mine.nickname) guestNickname.value = order.mine.nickname
   draftBatchId.value = order.activeBatchId
   batchChanged.value = false
   activeKey = draftKey(date.value, period.value, order.activeBatchId)
   const stored = draftStore.load(activeKey)
+  if (!kitchenViewer.value?.authenticated) {
+    guestNickname.value = guestNicknamePreference.resolve(order.mine.nickname, stored?.draft.nickname)
+  }
+  const source = serverDraft(order)
   applyDraftState(() => {
     Object.assign(draft, stored?.draft || source, { nickname: editorName(order) })
     baseline.value = stored?.baseline || content(source)
@@ -343,7 +345,10 @@ function inputDishQuantity(dish: Dish, event: Event) {
 }
 async function ensureIdentity(force = false): Promise<boolean> {
   if (kitchenViewer.value?.authenticated) return true
-  if (validActor.value && !force) return true
+  if (!force) {
+    if (!validActor.value) guestNickname.value = guestNicknamePreference.resolve(shared.value?.mine.nickname, draft.nickname)
+    return true
+  }
   if (identityPromise) return identityPromise
   nicknameFromDrawer = sharedOpen.value
   closeShared(false)
@@ -354,10 +359,9 @@ async function ensureIdentity(force = false): Promise<boolean> {
   return identityPromise
 }
 function completeNickname() {
-  const value = nicknameInput.value.trim()
-  if (!value || value.length > 32) { nicknameError.value = '昵称需要 1 至 32 个字符。'; return }
-  guestNickname.value = value
-  try { localStorage.setItem('lemonslice-kitchen-nickname', value) } catch { /* Page preference still works. */ }
+  const value = normalizeGuestNickname(nicknameInput.value)
+  if (!value) { nicknameError.value = '昵称需要 1 至 32 个字符。'; return }
+  guestNickname.value = guestNicknamePreference.set(value)
   const resolve = identityResolve
   identityResolve = null
   identityPromise = null
@@ -627,7 +631,7 @@ onUnmounted(() => { persistDraft(); autosave.dispose(); identityResolve?.(false)
       <div class="k-context-bar">
         <label class="k-context-field"><span>用餐日期</span><input type="date" :value="date" :min="kitchenViewer?.today" :max="kitchenViewer?.maxDate" :disabled="busyInteraction || loading" @change="changeContext('date', $event)" /></label>
         <label class="k-context-field"><span>餐次</span><select :value="period" :disabled="busyInteraction || loading" @change="changeContext('period', $event)"><option v-for="meal in mealPeriods" :key="meal.code" :value="meal.code">{{ meal.name }}</option></select></label>
-        <div class="k-actor-line"><span>点餐人：</span><span v-if="kitchenViewer?.authenticated">{{ actorName }}</span><button v-else type="button" class="k-text-link" :disabled="busyInteraction" @click="ensureIdentity(true)">{{ actorName || '设置昵称' }}<KitchenIcon name="edit-line" /></button></div>
+        <div class="k-actor-line"><span>点餐人：</span><span v-if="kitchenViewer?.authenticated">{{ actorName }}</span><button v-else type="button" class="k-text-link" :disabled="busyInteraction || loading" @click="ensureIdentity(true)">{{ actorName || '设置昵称' }}<KitchenIcon name="edit-line" /></button></div>
       </div>
       <div v-if="loading" class="k-empty" role="status">正在准备这一餐…</div>
       <div v-else-if="loadError" class="k-notice k-notice--error" role="alert"><p>{{ loadError }}</p><button class="k-button k-button--secondary" @click="bootstrap">重新加载</button></div>

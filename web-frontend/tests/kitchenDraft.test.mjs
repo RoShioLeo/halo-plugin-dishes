@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { ContextDraftStore, createRequestTracker, draftContent, draftKey, applicableToMeal, mealTagNames, isCurrentBatch, canEditSubmitted, updateSavedQuantity, freezeSubmissionPayload, catalogueIncludesDish, canIncreaseCatalogueDish, stockOrdered, isPublicQuantity } from '../src/utils/kitchenDraft.ts'
+import { createGuestNicknamePreference, GUEST_NICKNAME_KEY } from '../src/utils/guestNickname.ts'
 
 const draft = (name = '番茄炒蛋', id = 1) => ({ revision: 0, items: [{ dishId: id, name, imageUrl: '', quantity: 1, note: '', tags: ['家常'] }], offMenu: '', remark: '', nickname: '小柠檬' })
 test('public quantities accept only integer counts from zero through 99', () => {
@@ -14,6 +15,38 @@ function memoryStorage() {
   const values = new Map()
   return { values, getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) }
 }
+
+test('an anonymous default nickname is generated once and remembered across page instances', () => {
+  const memory = memoryStorage()
+  let randomCalls = 0
+  const random = () => { randomCalls++; return 0.5 }
+  const preference = createGuestNicknamePreference(() => memory, random)
+  const name = preference.resolve()
+  assert.match(name, /^访客\d{4}$/)
+  assert.equal(preference.resolve(), name)
+  assert.equal(createGuestNicknamePreference(() => memory, random).resolve(), name)
+  assert.equal(memory.getItem(GUEST_NICKNAME_KEY), name)
+  assert.equal(randomCalls, 1)
+})
+
+test('existing local, server and pending-draft nicknames take priority over a random default', () => {
+  const noRandom = () => { throw new Error('Existing names must not be replaced') }
+  const local = memoryStorage()
+  local.setItem(GUEST_NICKNAME_KEY, '小柠檬')
+  assert.equal(createGuestNicknamePreference(() => local, noRandom).resolve('服务端昵称', '草稿昵称'), '小柠檬')
+  assert.equal(createGuestNicknamePreference(() => memoryStorage(), noRandom).resolve('服务端昵称', '草稿昵称'), '服务端昵称')
+  assert.equal(createGuestNicknamePreference(() => memoryStorage(), noRandom).resolve('', '草稿昵称'), '草稿昵称')
+})
+
+test('denied local storage keeps the default and a manually chosen nickname usable in page memory', () => {
+  let randomCalls = 0
+  const preference = createGuestNicknamePreference(() => { throw new Error('Storage denied') }, () => { randomCalls++; return 0 })
+  assert.equal(preference.resolve(), '访客1000')
+  assert.equal(preference.resolve(), '访客1000')
+  assert.equal(preference.set('薄荷汽水'), '薄荷汽水')
+  assert.equal(preference.resolve(), '薄荷汽水')
+  assert.equal(randomCalls, 1)
+})
 
 test('switching meal contexts never copies A selections into B, and returning restores A pending edits', () => {
   const storage = memoryStorage()

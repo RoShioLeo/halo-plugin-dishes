@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1-lemonslice.1 — 2026-11-05
+
+- Give first-time guests a remembered default nickname so autosave works immediately.
+- Preserve existing custom names and pending draft content; account names still come from Halo.
+
 ## 1.1.0-lemonslice.1 — 2026-11-05
 
 - Shared per-person ordering, guest/account identity and submitted meal batches.

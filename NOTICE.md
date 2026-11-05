@@ -6,9 +6,9 @@ This is a modified version of **Halo Dishes**, originally by **bai**.
 - Original author: bai, https://avrinbai.cn
 - Upstream baseline: `ddb7a9f524323bf7efd3da90d056af369d04f071` (version 1.0.3).
 - Modified by: RoShioLeo for LemonSlice Cloud, **2026-11-05**.
-- Modified version: **1.1.0-lemonslice.1**.
+- Modified version: **1.1.1-lemonslice.1**.
 - Corresponding source, including build files and dependency lockfiles:
-  https://github.com/RoShioLeo/halo-plugin-dishes/tree/v1.1.0-lemonslice.1
+  https://github.com/RoShioLeo/halo-plugin-dishes/tree/v1.1.1-lemonslice.1
 
 The modifications replace public and Console presentation with the LemonSlice
 design, add responsive desktop and dark appearance support, replace default

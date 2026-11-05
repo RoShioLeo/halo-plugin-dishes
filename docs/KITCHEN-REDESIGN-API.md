@@ -1,6 +1,6 @@
 # Shared kitchen contract
 
-This is the new, unpublished kitchen model. It has no migration or compatibility
+This is the new shared kitchen model. It has no migration or compatibility
 API. Quantities are nonnegative safe integers in proposals and positive integers
 in stored item rows. Zero removes an item only when its corresponding save or
 submission succeeds.
@@ -10,7 +10,7 @@ submission succeeds.
 - One date and meal shares one order, with per-person sources and submitted batches.
 - Dates: today through today + 7, inclusive, Asia/Shanghai. Breakfast before 10:00,
   lunch from 10:00 through 15:59, dinner from 16:00. An explicit link/manual choice wins.
-- Guests choose a nickname; account names/avatars come from Halo. The server owns
+- Guests receive a remembered default nickname and can rename it; account names/avatars come from Halo. The server owns
   identity and source ownership. Opaque participant IDs reveal no guest secret.
 - Own pending selections, wishes and meal remarks save automatically. Other people's
   pending rows allow only quantity changes. No public caller may change submitted
