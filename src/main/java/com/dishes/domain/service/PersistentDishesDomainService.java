@@ -44,7 +44,7 @@ public class PersistentDishesDomainService {
         }
     }
 
-    public void validateDishInput(String name, String imageUrl, int recommendationLevel, List<Long> mealPeriodIds) {
+    public void validateDishInput(String name, String imageUrl, int recommendationLevel) {
         var n = name == null ? "" : name.trim();
         if (n.isBlank()) throw new BusinessException(BusinessErrorCode.BAD_REQUEST, "菜品名称不能为空");
         if (n.length() > 200) throw new BusinessException(BusinessErrorCode.BAD_REQUEST, "菜品名称过长（最多 200 字符）");
@@ -52,15 +52,6 @@ public class PersistentDishesDomainService {
         if (recommendationLevel < 1 || recommendationLevel > 5) {
             throw new BusinessException(BusinessErrorCode.BAD_REQUEST, "推荐等级需在 1-5");
         }
-        if (mealPeriodIds == null || mealPeriodIds.isEmpty()) {
-            throw new BusinessException(BusinessErrorCode.BAD_REQUEST, "请至少选择一个餐段");
-        }
-        for (var id : mealPeriodIds) {
-            if (id == null || (id != 1L && id != 2L && id != 3L)) {
-                throw new BusinessException(BusinessErrorCode.BAD_REQUEST, "餐段不合法（仅支持 1/2/3）");
-            }
-        }
-
         var img = trimToNull(imageUrl);
         if (img != null) {
             var lower = img.toLowerCase(Locale.ROOT);

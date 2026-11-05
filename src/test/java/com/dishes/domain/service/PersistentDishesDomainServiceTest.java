@@ -13,7 +13,7 @@ class PersistentDishesDomainServiceTest {
 
     @Test
     void validateDishInputShouldRejectEmptyName() {
-        var ex = assertThrows(BusinessException.class, () -> service.validateDishInput("  ", "/a.png", 3, List.of(1L)));
+        var ex = assertThrows(BusinessException.class, () -> service.validateDishInput("  ", "/a.png", 3));
         assertEquals("菜品名称不能为空", ex.getMessage());
     }
 

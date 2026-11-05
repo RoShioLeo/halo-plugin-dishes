@@ -4,10 +4,9 @@ import com.dishes.ExtensionSchemeRegistry;
 import com.dishes.api.BusinessErrorCode;
 import com.dishes.api.BusinessException;
 import com.dishes.domain.DishesStore;
+import com.dishes.domain.service.DishTags;
 import com.dishes.extension.Dish;
 import com.dishes.extension.DishCategory;
-import com.dishes.extension.MealOrder;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -34,7 +33,6 @@ public class PersistentDishesFinder {
         return switch (scope) {
             case "category" -> nextIdFromExisting(DishCategory.class);
             case "dish" -> nextIdFromExisting(Dish.class);
-            case "order" -> nextIdFromExisting(MealOrder.class);
             default -> throw new BusinessException(BusinessErrorCode.BAD_REQUEST, "Unknown id scope: " + scope);
         };
     }
@@ -85,7 +83,8 @@ public class PersistentDishesFinder {
                 spec.getDescription(),
                 spec.getIsAvailable() == null || spec.getIsAvailable(),
                 spec.getSortOrder() == null ? 0 : spec.getSortOrder(),
-                spec.getMealPeriodIds() == null ? List.of() : List.copyOf(spec.getMealPeriodIds())
+                DishTags.normalize(spec.getTags()),
+                Boolean.TRUE.equals(spec.getSoldOut())
             ));
         }
         out.sort(Comparator.comparingInt(DishesStore.Dish::sortOrder).thenComparingLong(DishesStore.Dish::id));
@@ -95,37 +94,6 @@ public class PersistentDishesFinder {
     public Dish getDishExt(long id) {
         extensionSchemeRegistry.ensureRegistered();
         return client.fetch(Dish.class, String.valueOf(id)).block();
-    }
-
-    public MealOrder getMealOrderExt(String name) {
-        extensionSchemeRegistry.ensureRegistered();
-        return client.fetch(MealOrder.class, name).block();
-    }
-
-    public List<MealOrder> listMealOrders() {
-        extensionSchemeRegistry.ensureRegistered();
-        return listAll(MealOrder.class);
-    }
-
-    public List<DishCategory> listAllDishCategoryExtensions() {
-        extensionSchemeRegistry.ensureRegistered();
-        return listAll(DishCategory.class);
-    }
-
-    public List<Dish> listAllDishExtensions() {
-        extensionSchemeRegistry.ensureRegistered();
-        return listAll(Dish.class);
-    }
-
-    public MealOrder findMealOrderByDateAndPeriod(LocalDate date, String periodCode) {
-        extensionSchemeRegistry.ensureRegistered();
-        for (var ext : listMealOrders()) {
-            if (ext.getSpec() == null) continue;
-            if (!Objects.equals(ext.getSpec().getOrderDate(), date.toString())) continue;
-            if (!Objects.equals(ext.getSpec().getMealPeriodCode(), periodCode)) continue;
-            return ext;
-        }
-        return null;
     }
 
     private <T extends AbstractExtension> long nextIdFromExisting(Class<T> type) {

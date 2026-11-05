@@ -12,11 +12,13 @@ function apiPrefix(): string {
 const ACCESS_TOKEN_KEY = 'dishes_access_token'
 export class ApiError extends Error {
   readonly code?: string
+  readonly status?: number
 
-  constructor(message: string, code?: string) {
+  constructor(message: string, code?: string, status?: number) {
     super(message)
     this.name = 'ApiError'
     this.code = code
+    this.status = status
   }
 }
 
@@ -48,112 +50,18 @@ function withAccessHeaders(init: HeadersInit): HeadersInit {
   }
 }
 
-function readCookie(name: string): string {
-  try {
-    const source = typeof document !== 'undefined' ? document.cookie ?? '' : ''
-    if (!source) return ''
-    const parts = source.split(';')
-    for (const p of parts) {
-      const [k, ...rest] = p.trim().split('=')
-      if (k === name) return decodeURIComponent(rest.join('='))
-    }
-    return ''
-  } catch {
-    return ''
-  }
-}
-
-function readMeta(name: string): string {
-  try {
-    if (typeof document === 'undefined') return ''
-    const el = document.querySelector(`meta[name="${name}"]`)
-    return (el?.getAttribute('content') ?? '').trim()
-  } catch {
-    return ''
-  }
-}
-
-function resolveCsrf(): { headerName: string; token: string } | null {
-  try {
-    const fromWindow = (window as unknown as { __DISHES_CSRF__?: { headerName?: string; token?: string } })
-      .__DISHES_CSRF__
-    const h1 = (fromWindow?.headerName ?? '').trim()
-    const t1 = (fromWindow?.token ?? '').trim()
-    if (h1 && t1) return { headerName: h1, token: t1 }
-  } catch {
-    // ignore
-  }
-
-  const h2 = readMeta('dishes-csrf-header')
-  const t2 = readMeta('dishes-csrf-token')
-  if (h2 && t2) return { headerName: h2, token: t2 }
-
-  try {
-    const c = csrfMetaCache
-    const hn = (c?.headerName ?? '').trim()
-    const tk = (c?.token ?? '').trim()
-    if (hn && tk) return { headerName: hn, token: tk }
-  } catch {
-    // ignore
-  }
-
-  const token =
-    readCookie('XSRF-TOKEN') || readCookie('CSRF-TOKEN') || readCookie('X-CSRF-TOKEN')
-  if (token) return { headerName: 'X-XSRF-TOKEN', token }
-
-  return null
-}
-
-/** 由 GET /csrf-metadata 写入；不依赖可读 Cookie（XSRF-TOKEN 可能为 HttpOnly）。 */
-let csrfMetaCache: { headerName: string; token: string } | null = null
-
-async function loadCsrfMetadata(): Promise<void> {
-  const base = apiBase()
-  const prefix = apiPrefix()
-  const res = await fetch(`${base}${prefix}/csrf-metadata`, {
-    method: 'GET',
+async function loadCsrfMetadata(): Promise<{ headerName: string; token: string }> {
+  const res = await fetch(`${apiBase()}${apiPrefix()}/csrf-metadata`, {
     headers: withAccessHeaders({ Accept: 'application/json' }),
     credentials: 'include',
   })
-  const text = await res.text()
-  let json: unknown
-  try {
-    json = JSON.parse(text) as unknown
-  } catch {
-    return
+  const { json, parseNote } = await readJsonBody(res)
+  if (!res.ok || !isOkEnvelope(json)) throw toApiError(res, json, parseNote)
+  const data = (json as { data: { headerName?: string; token?: string } }).data
+  if (!data?.headerName || !data.token) {
+    throw new ApiError('无法获取验证信息，请允许本站 Cookie 后重试。', 'CSRF_MISSING')
   }
-  if (typeof json !== 'object' || json === null || (json as { ok?: unknown }).ok !== true) return
-  const data = (json as { data?: unknown }).data
-  if (typeof data !== 'object' || data === null) return
-  const headerName = String((data as { headerName?: unknown }).headerName ?? '').trim()
-  const token = String((data as { token?: unknown }).token ?? '').trim()
-  if (headerName && token) csrfMetaCache = { headerName, token }
-}
-
-/** 独立部署：拉取 CSRF 后再 POST，避免 Spring Security 返回 403 text/plain。 */
-let csrfWarmChain: Promise<void> | null = null
-
-async function ensureCsrfForPost(): Promise<void> {
-  if (resolveCsrf()) return
-  if (!csrfWarmChain) {
-    csrfWarmChain = (async () => {
-      await loadCsrfMetadata()
-      if (resolveCsrf()) return
-      const base = apiBase()
-      const prefix = apiPrefix()
-      await fetch(`${base}${prefix}/access/status`, {
-        method: 'GET',
-        headers: withAccessHeaders({ Accept: 'application/json' }),
-        credentials: 'include',
-      })
-    })()
-  }
-  try {
-    await csrfWarmChain
-  } catch (e) {
-    csrfWarmChain = null
-    throw e
-  }
+  return { headerName: data.headerName, token: data.token }
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
@@ -175,27 +83,12 @@ export async function apiGet<T>(path: string): Promise<T> {
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const base = apiBase()
   const prefix = apiPrefix()
-  if (!resolveCsrf()) {
-    await ensureCsrfForPost()
-  }
-  if (!resolveCsrf()) {
-    throw new ApiError(
-      '无法获取 CSRF：请允许本站 Cookie，并确保请求使用 credentials: include（不要用 omit）',
-      'CSRF_MISSING',
-    )
-  }
+  const csrf = await loadCsrfMetadata()
   const headers: HeadersInit = withAccessHeaders({
     Accept: 'application/json',
     'Content-Type': 'application/json',
+    [csrf.headerName]: csrf.token,
   })
-  const csrf = resolveCsrf()
-  if (csrf) {
-    ;(headers as Record<string, string>)[csrf.headerName] = csrf.token
-    // 兼容部分服务端网关只认 X-XSRF-TOKEN
-    if (csrf.headerName !== 'X-XSRF-TOKEN') {
-      ;(headers as Record<string, string>)['X-XSRF-TOKEN'] = csrf.token
-    }
-  }
   const res = await fetch(`${base}${prefix}${path}`, {
     method: 'POST',
     headers,
@@ -262,7 +155,7 @@ function resolveApiErrorCode(json: unknown): string | undefined {
 }
 
 function toApiError(res: Response, json: unknown, parseNote?: string): ApiError {
-  return new ApiError(resolveApiErrorMessage(res, json, parseNote), resolveApiErrorCode(json))
+  return new ApiError(resolveApiErrorMessage(res, json, parseNote), resolveApiErrorCode(json), res.status)
 }
 
 export function getApiErrorMessage(

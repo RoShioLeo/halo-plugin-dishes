@@ -3,6 +3,7 @@ package com.dishes.service.admin;
 import com.dishes.api.BusinessErrorCode;
 import com.dishes.api.BusinessException;
 import com.dishes.domain.DishesStore;
+import com.dishes.domain.service.DishTags;
 import com.dishes.service.dto.ApiPayloads;
 import java.util.List;
 import java.util.Map;
@@ -44,7 +45,8 @@ public class AdminMenuService {
     }
 
     public Map<String, Object> listDishes() {
-        return ApiPayloads.itemList(store.listDishes(null));
+        var dishes = store.listDishes(null);
+        return Map.of("items", dishes, "tags", DishTags.suggestions(dishes));
     }
 
     public Map<String, Object> createDish(
@@ -55,9 +57,10 @@ public class AdminMenuService {
         String description,
         boolean isAvailable,
         int sortOrder,
-        List<Long> mealPeriodIds
+        List<String> tags,
+        boolean soldOut
     ) {
-        var d = store.createDish(categoryId, name, imageUrl, recommendationLevel, description, isAvailable, sortOrder, mealPeriodIds);
+        var d = store.createDish(categoryId, name, imageUrl, recommendationLevel, description, isAvailable, sortOrder, tags, soldOut);
         return ApiPayloads.idCreated(d.id());
     }
 
@@ -70,9 +73,10 @@ public class AdminMenuService {
         String description,
         boolean isAvailable,
         int sortOrder,
-        List<Long> mealPeriodIds
+        List<String> tags,
+        boolean soldOut
     ) {
-        var d = store.updateDish(id, categoryId, name, imageUrl, recommendationLevel, description, isAvailable, sortOrder, mealPeriodIds);
+        var d = store.updateDish(id, categoryId, name, imageUrl, recommendationLevel, description, isAvailable, sortOrder, tags, soldOut);
         if (d == null) throw new BusinessException(BusinessErrorCode.NOT_FOUND, "notfound");
         return ApiPayloads.updated(id);
     }

@@ -18,15 +18,14 @@ The full license texts are distributed in `third-party-licenses/` in this source
 
 The installed Vue runtime packages listed above carry identical complete license texts. One unchanged copy is supplied for all of them. The vue-draggable-plus distribution embeds SortableJS 1.15.2; it imports Vue from the host in the Console build. No separate VueUse runtime package is included by this plugin's Console bundle.
 
-The Remix Icon paths used here are `file-list-3-line`, `restaurant-2-line`, and `settings-3-line`. The build mechanically wraps the original path data in Vue render functions. This fork does not change the path data. The pinned icon set declares Apache-2.0 in its installed `info.json` and `package.json`; the full text is copied from the matching upstream v4.8.0 `License` file.
-
-## Additional declared runtime package
-
-`canvas-confetti` 1.9.4 is declared by the upstream Console package but is not imported by the current source. Its notice is included conservatively for distributions built with the retained manifest:
-
-- Copyright (c) 2020, Kiril Vatev.
-- [ISC license](third-party-licenses/canvas-confetti-ISC.txt).
-- Source: <https://github.com/catdad/canvas-confetti/tree/v1.9.4>.
+The Remix Icon paths used here are `file-list-3-line`, `restaurant-2-line`,
+`settings-3-line`, `refresh-line`, `share-line`, `close-line`, `search-line`,
+`edit-line`, `add-line`, `subtract-line`, `arrow-left-s-line`,
+`arrow-right-s-line`, `group-line`, `send-plane-line`, `menu-line`, and
+`check-line`. The build and local
+Vue icon component wrap the original static path data without changing it. The
+pinned icon set declares Apache-2.0 in its installed `info.json` and `package.json`;
+the full text is copied from the matching upstream v4.8.0 `License` file.
 
 ## Host-provided dependencies
 
@@ -36,7 +35,7 @@ Build-only tooling, type declarations, tests, and package-manager dependencies a
 
 ## License-text provenance
 
-The Vue, Vue Router, Tailwind CSS, vue-draggable-plus, and canvas-confetti texts were copied without modification from the installed packages' `LICENSE` files. The remaining texts were copied without modification from these version-pinned upstream sources:
+The Vue, Vue Router, Tailwind CSS, and vue-draggable-plus texts were copied without modification from the installed packages' `LICENSE` files. The remaining texts were copied without modification from these version-pinned upstream sources:
 
 - SortableJS: <https://raw.githubusercontent.com/SortableJS/Sortable/1.15.2/LICENSE>.
 - Remix Icon: <https://raw.githubusercontent.com/Remix-Design/RemixIcon/v4.8.0/License>.

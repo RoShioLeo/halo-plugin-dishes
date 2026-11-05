@@ -27,3 +27,14 @@ tasks.register('pnpmBuild', PnpmTask) {
 tasks.named('assemble') {
     dependsOn tasks.named('pnpmBuild')
 }
+
+tasks.register('pnpmCheck', PnpmTask) {
+    group = 'verification'
+    description = 'Verify shared-kitchen draft isolation and request sequencing'
+    args = ['test']
+    dependsOn tasks.named('pnpmInstall')
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('pnpmCheck')
+}

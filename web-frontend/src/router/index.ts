@@ -32,15 +32,16 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: HomeView,
-      meta: { title: '首页' },
+      meta: { title: '当日菜单' },
     },
     {
       path: '/order',
       name: 'order',
       component: OrderView,
-      meta: { title: '点菜' },
+      meta: { title: '看看吃啥' },
     },
     { path: '/dishes/manage', redirect: '/' },
+    { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
   scrollBehavior() {
     return { top: 0 }

@@ -158,11 +158,6 @@ public class DishesSettingsService {
         spec.setPublicBrandTitle("");
         spec.setPublicBrandSubtitle("");
         spec.setPublicDomainWhitelist("");
-        spec.setNotifyEnabled(false);
-        spec.setNotifyChannel("");
-        spec.setNotifyWebhookUrl("");
-        spec.setNotifyOrderNowEnabled(true);
-        spec.setNotifyOrderReservationEnabled(false);
         return spec;
     }
 }

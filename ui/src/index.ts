@@ -14,7 +14,7 @@ export default definePlugin({
         name: 'DishesPluginRoot',
         component: () =>
           import(/* webpackChunkName: "DishesPluginOutlet" */ './views/DishesPluginOutlet.vue'),
-        redirect: { name: 'DishesDishes' },
+        redirect: { name: 'DishesOrders' },
         meta: {
           title: '柠檬私厨',
           menu: {
@@ -35,7 +35,7 @@ export default definePlugin({
               menu: {
                 name: '菜品管理',
                 icon: markRaw(RiRestaurant2Line),
-                priority: 1,
+                priority: 2,
               },
             },
           },
@@ -44,19 +44,20 @@ export default definePlugin({
             name: 'DishesOrders',
             component: () => import(/* webpackChunkName: "OrdersView" */ './views/OrdersView.vue'),
             meta: {
-              title: '点餐记录',
+              title: '厨房工作台',
               searchable: true,
               menu: {
-                name: '点餐记录',
+                name: '厨房工作台',
                 icon: markRaw(RiFileList3Line),
-                priority: 2,
+                priority: 1,
               },
             },
           },
           {
             path: 'settings',
             name: 'DishesSettings',
-            component: () => import(/* webpackChunkName: "SettingsView" */ './views/SettingsView.vue'),
+            component: () =>
+              import(/* webpackChunkName: "SettingsView" */ './views/SettingsView.vue'),
             meta: {
               title: '插件设置',
               searchable: true,

@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Dialog, Toast, VButton, VCard, VPageHeader } from '@halo-dev/components'
 import { utils } from '@halo-dev/ui-shared'
-import { downloadBackupZip, getApiErrorMessage, getData, importBackupZip, putData } from '@/api/client'
+import { getApiErrorMessage, getData, putData } from '@/api/client'
 import RiSettings3Line from '~icons/ri/settings-3-line'
 
 type AccessMode = 'none' | 'password'
@@ -23,24 +23,12 @@ type SettingsResp = {
     publicDomainWhitelist: string
     defaultPublicAccessUrl: string
   }
-  notify: {
-    enabled: boolean
-    channel: string
-    webhookUrl: string
-    orderNowEnabled: boolean
-    orderReservationEnabled: boolean
-  }
 }
 
 const loading = ref(true)
 const saving = ref(false)
-const activeTab = ref<'basic' | 'security' | 'notify' | 'backup'>('basic')
+const activeTab = ref<'basic' | 'security'>('basic')
 const logoAttachmentModalOpen = ref(false)
-
-const backupIncludeOrders = ref(false)
-const backupExporting = ref(false)
-const backupImporting = ref(false)
-const backupFileInput = ref<HTMLInputElement | null>(null)
 
 const form = reactive<SettingsResp>({
   basic: {
@@ -55,18 +43,15 @@ const form = reactive<SettingsResp>({
     publicDomainWhitelist: '',
     defaultPublicAccessUrl: '/dishes',
   },
-  notify: {
-    enabled: false,
-    channel: '',
-    webhookUrl: '',
-    orderNowEnabled: true,
-    orderReservationEnabled: false,
-  },
 })
 
 const accessModeOptions: Array<{ value: AccessMode; label: string; desc: string }> = [
   { value: 'none', label: '无需鉴权', desc: '前台可直接访问并点菜，无需登录或密码。' },
-  { value: 'password', label: '密码访问', desc: '首次访问需输入密码，本地缓存有效期内免重复输入。' },
+  {
+    value: 'password',
+    label: '密码访问',
+    desc: '首次访问需输入密码，本地缓存有效期内免重复输入。',
+  },
 ]
 
 const needPasswordInput = computed(() => form.basic.accessMode === 'password')
@@ -111,7 +96,10 @@ function onLogoAttachmentSelect(attachments: AttachmentLike[]) {
     form.basic.publicLogoUrl = url.trim()
     return
   }
-  Dialog.warning({ title: '选择失败', description: '未从附件中解析到可用图片地址，请换一个附件重试。' })
+  Dialog.warning({
+    title: '选择失败',
+    description: '未从附件中解析到可用图片地址，请换一个附件重试。',
+  })
 }
 
 async function load() {
@@ -128,11 +116,6 @@ async function load() {
     form.basic.publicBrandTitle = data.basic?.publicBrandTitle ?? ''
     form.basic.publicBrandSubtitle = data.basic?.publicBrandSubtitle ?? ''
     form.basic.publicDomainWhitelist = data.basic?.publicDomainWhitelist ?? ''
-    form.notify.enabled = !!data.notify?.enabled
-    form.notify.channel = data.notify?.channel ?? ''
-    form.notify.webhookUrl = data.notify?.webhookUrl ?? ''
-    form.notify.orderNowEnabled = data.notify?.orderNowEnabled ?? true
-    form.notify.orderReservationEnabled = data.notify?.orderReservationEnabled ?? false
   } catch (e) {
     Dialog.error({
       title: '加载失败',
@@ -163,13 +146,6 @@ async function save() {
         publicBrandSubtitle: form.basic.publicBrandSubtitle,
         publicDomainWhitelist: form.basic.publicDomainWhitelist,
       },
-      notifyConfig: {
-        enabled: form.notify.enabled,
-        channel: form.notify.channel,
-        webhookUrl: form.notify.webhookUrl,
-        orderNowEnabled: form.notify.orderNowEnabled,
-        orderReservationEnabled: form.notify.orderReservationEnabled,
-      },
     })
     Toast.success('设置已保存')
     await load()
@@ -182,63 +158,6 @@ async function save() {
     })
   } finally {
     saving.value = false
-  }
-}
-
-async function exportDishesBackup() {
-  backupExporting.value = true
-  try {
-    const blob = await downloadBackupZip({ includeOrders: backupIncludeOrders.value })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `dishes-backup-${new Date().toISOString().slice(0, 10)}.zip`
-    a.rel = 'noopener'
-    a.click()
-    URL.revokeObjectURL(url)
-    Toast.success('导出已开始下载')
-  } catch (e) {
-    Dialog.error({
-      title: '导出失败',
-      description: getApiErrorMessage(e, '导出失败，请稍后重试'),
-    })
-  } finally {
-    backupExporting.value = false
-  }
-}
-
-function pickBackupFile() {
-  backupFileInput.value?.click()
-}
-
-async function onBackupFileChange(ev: Event) {
-  const input = ev.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-  const name = file.name.toLowerCase()
-  if (!name.endsWith('.zip')) {
-    Dialog.warning({ title: '格式不正确', description: '请选择本插件导出的 .zip 备份文件。' })
-    return
-  }
-  const ok = window.confirm(
-    '覆盖式导入将删除当前所有点餐订单、菜品与分类，并以备份文件重建。\n\n导入前请确认已另行保存必要数据。是否继续？',
-  )
-  if (!ok) return
-  backupImporting.value = true
-  try {
-    const r = await importBackupZip(file)
-    Toast.success(`导入完成：分类 ${r.imported_categories}，菜品 ${r.imported_dishes}，订单 ${r.imported_orders}`)
-    await load()
-  } catch (e) {
-    Dialog.error({
-      title: '导入失败',
-      description: getApiErrorMessage(e, '导入失败，请检查备份文件或稍后重试', {
-        DISHES_BAD_REQUEST: '备份文件无效或与当前版本不兼容',
-      }),
-    })
-  } finally {
-    backupImporting.value = false
   }
 }
 
@@ -281,22 +200,6 @@ onMounted(() => {
           >
             安全设置
           </button>
-          <button
-            type="button"
-            class="settings-tab"
-            :class="{ 'settings-tab--active': activeTab === 'notify' }"
-            @click="activeTab = 'notify'"
-          >
-            通知设置
-          </button>
-          <button
-            type="button"
-            class="settings-tab"
-            :class="{ 'settings-tab--active': activeTab === 'backup' }"
-            @click="activeTab = 'backup'"
-          >
-            数据备份
-          </button>
         </div>
       </template>
 
@@ -312,12 +215,22 @@ onMounted(() => {
               <div class="settings-field-label">前台 Logo</div>
               <div class="settings-logo-row">
                 <div class="settings-logo-preview-wrap">
-                  <img v-if="logoPreviewUrl" :src="logoPreviewUrl" alt="logo" class="settings-logo-preview" />
+                  <img
+                    v-if="logoPreviewUrl"
+                    :src="logoPreviewUrl"
+                    alt="logo"
+                    class="settings-logo-preview"
+                  />
                   <span v-else class="settings-logo-placeholder">未设置</span>
                 </div>
                 <div class="settings-logo-actions">
                   <VButton size="sm" @click="logoAttachmentModalOpen = true">从附件库选择</VButton>
-                  <VButton size="sm" type="secondary" :disabled="!form.basic.publicLogoUrl" @click="form.basic.publicLogoUrl = ''">
+                  <VButton
+                    size="sm"
+                    type="secondary"
+                    :disabled="!form.basic.publicLogoUrl"
+                    @click="form.basic.publicLogoUrl = ''"
+                  >
                     清空
                   </VButton>
                 </div>
@@ -326,15 +239,17 @@ onMounted(() => {
             </div>
 
             <div class="settings-field">
-              <div class="settings-field-label">前台页面标题</div>
+              <div class="settings-field-label">浏览器标题</div>
               <input
                 v-model="form.basic.publicSiteTitle"
                 type="text"
                 class="settings-input"
                 maxlength="80"
-                placeholder="浏览器标签显示，例如：柠檬私厨"
+                placeholder="柠檬私厨"
               />
-              <p class="settings-hint">留空则使用默认「柠檬私厨」。路由切换时会显示为「首页 · 标题」等形式。</p>
+              <p class="settings-hint">
+                留空使用「柠檬私厨」。标题示例：当日菜单 - 柠檬私厨。
+              </p>
             </div>
 
             <div class="settings-field">
@@ -358,7 +273,9 @@ onMounted(() => {
                 rows="3"
                 placeholder="例如：今天，想吃点什么？"
               />
-              <p class="settings-hint">留空则使用默认「今天，想吃点什么？」（最多 400 字，保存时服务端会截断）。</p>
+              <p class="settings-hint">
+                留空则使用默认「今天，想吃点什么？」（最多 400 字，保存时服务端会截断）。
+              </p>
             </div>
           </div>
 
@@ -369,7 +286,12 @@ onMounted(() => {
             <h4 class="settings-subtitle">前台访问策略</h4>
             <div class="settings-mode-list">
               <label v-for="opt in accessModeOptions" :key="opt.value" class="settings-mode-item">
-                <input v-model="form.basic.accessMode" type="radio" name="access-mode" :value="opt.value" />
+                <input
+                  v-model="form.basic.accessMode"
+                  type="radio"
+                  name="access-mode"
+                  :value="opt.value"
+                />
                 <div class="settings-mode-content">
                   <div class="settings-mode-label">{{ opt.label }}</div>
                   <div class="settings-mode-desc">{{ opt.desc }}</div>
@@ -385,7 +307,9 @@ onMounted(() => {
                 class="settings-input"
                 placeholder="请输入前台访问密码"
               />
-              <p v-if="form.basic.accessPasswordSet" class="settings-hint">已设置密码，留空将清空。</p>
+              <p v-if="form.basic.accessPasswordSet" class="settings-hint">
+                已设置密码，留空将清空。
+              </p>
             </div>
 
             <div class="settings-field">
@@ -409,74 +333,7 @@ onMounted(() => {
                 rows="4"
                 placeholder="每行一个域名，如：menu.example.com"
               />
-              <p class="settings-hint">
-                留空表示不限制来源；填写一级域名则其二级域名也允许请求。
-              </p>
-            </div>
-          </div>
-
-          <div v-show="activeTab === 'notify'" class="settings-section">
-            <h3 class="settings-title">通知设置</h3>
-            <p class="settings-desc">点菜提交后可推送企业微信群机器人消息卡片。</p>
-            <label class="settings-checkbox">
-              <input v-model="form.notify.enabled" type="checkbox" />
-              <span>启用通知</span>
-            </label>
-            <div class="settings-field">
-              <div class="settings-field-label">企业微信群机器人 Webhook</div>
-              <input
-                v-model="form.notify.webhookUrl"
-                type="text"
-                class="settings-input"
-                placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
-              />
-            </div>
-            <label class="settings-checkbox">
-              <input v-model="form.notify.orderNowEnabled" type="checkbox" :disabled="!form.notify.enabled" />
-              <span>立即点菜通知</span>
-            </label>
-            <label class="settings-checkbox">
-              <input v-model="form.notify.orderReservationEnabled" type="checkbox" :disabled="!form.notify.enabled" />
-              <span>预约点菜通知</span>
-            </label>
-          </div>
-
-          <div v-show="activeTab === 'backup'" class="settings-section">
-            <input
-              ref="backupFileInput"
-              type="file"
-              accept=".zip,application/zip"
-              class="settings-hidden-file"
-              @change="onBackupFileChange"
-            />
-            <h3 class="settings-title">数据备份</h3>
-            <p class="settings-desc">
-              导出为 ZIP，内含 <code class="settings-code">manifest.json</code>。菜品仅备份 <code class="settings-code">image_url</code> 路径或地址，不包含图片文件本身；跨站迁移时请自行保证附件或外链可访问。
-            </p>
-            <label class="settings-checkbox">
-              <input v-model="backupIncludeOrders" type="checkbox" />
-              <span>导出时包含点餐记录</span>
-            </label>
-            <div class="settings-backup-actions">
-              <VButton :disabled="loading || backupExporting || backupImporting" @click="exportDishesBackup">
-                {{ backupExporting ? '导出中…' : '导出备份（ZIP）' }}
-              </VButton>
-            </div>
-
-            <div class="settings-divider" />
-
-            <h4 class="settings-subtitle">覆盖式导入</h4>
-            <p class="settings-hint settings-hint--danger">
-              将删除当前<strong>全部</strong>点餐订单、菜品与分类，再以备份文件重建。执行前请自行导出或确认无需保留现有数据。
-            </p>
-            <div class="settings-backup-actions settings-backup-actions--import">
-              <VButton
-                :disabled="loading || backupExporting || backupImporting"
-                class="settings-import-btn"
-                @click="pickBackupFile"
-              >
-                {{ backupImporting ? '导入中…' : '选择 ZIP 并导入' }}
-              </VButton>
+              <p class="settings-hint">留空表示不限制来源；填写一级域名则其二级域名也允许请求。</p>
             </div>
           </div>
         </template>
@@ -687,71 +544,5 @@ onMounted(() => {
   justify-content: flex-end;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
-}
-
-.settings-hidden-file {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.settings-code {
-  font-size: 0.8125rem;
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
-  background: var(--ls-dishes-soft, #f7f7f8);
-  color: var(--ls-dishes-ink, #29292e);
-}
-
-.settings-backup-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.settings-divider {
-  height: 1px;
-  margin: 0.75rem 0;
-  background: var(--ls-dishes-line, #e8e8eb);
-}
-
-.settings-hint--danger {
-  color: var(--ls-dishes-danger, #b91c1c);
-}
-
-.settings-backup-actions--import :deep(.settings-import-btn),
-.settings-backup-actions--import :deep(.settings-import-btn button),
-.settings-backup-actions--import :deep(button.settings-import-btn) {
-  background-color: rgb(24 24 27) !important;
-  color: rgb(250 250 250) !important;
-  border-color: rgb(24 24 27) !important;
-  box-shadow: none !important;
-  font-weight: 500;
-}
-
-.settings-backup-actions--import :deep(.settings-import-btn:hover:not(:disabled)),
-.settings-backup-actions--import :deep(.settings-import-btn button:hover:not(:disabled)) {
-  background-color: rgb(39 39 42) !important;
-  color: rgb(250 250 250) !important;
-  border-color: rgb(39 39 42) !important;
-}
-
-.settings-backup-actions--import :deep(.settings-import-btn:focus-visible),
-.settings-backup-actions--import :deep(.settings-import-btn button:focus-visible) {
-  outline: 2px solid rgb(24 24 27);
-  outline-offset: 2px;
-}
-
-.settings-backup-actions--import :deep(.settings-import-btn:disabled),
-.settings-backup-actions--import :deep(.settings-import-btn button:disabled) {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 </style>

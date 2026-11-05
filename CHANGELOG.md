@@ -1,4 +1,21 @@
-# Changes
+# Changelog
+
+## 1.1.0-lemonslice.1 — 2026-11-05
+
+- Shared per-person ordering, guest/account identity and submitted meal batches.
+- Integer portions; one side edits at a time, with a synchronized source/menu draft.
+- Extra portions belong to the chef; reductions consume sources in reverse order.
+- Zero rows stay visible until a successful atomic commit removes them.
+- One private meal aggregate saves source quantities, locking and publication with CAS.
+- Chef-created dishes have distinct custom IDs and synchronized names.
+- User wishes and remarks are read-only in the kitchen workspace.
+- Meal tags and custom tags are separate; listing and in-stock columns both use positive boolean indicators.
+- All three meal periods normalize to all day; the editor has an explicit all-day option.
+- New submitted choices show one pending-confirmation badge in the kitchen workspace.
+- Reserve space between category drag handles and category names.
+- Removed prior orders, backup, notifications, random recommendations and adapters.
+- Removed obsolete frontend components, fields and unused confetti dependencies.
+- No old data/interface migration or fractional-quantity compatibility.
 
 ## 1.0.4-lemonslice.1 — 2026-11-05
 

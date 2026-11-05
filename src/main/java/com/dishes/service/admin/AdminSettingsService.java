@@ -31,42 +31,19 @@ public class AdminSettingsService {
         String publicSiteTitle,
         String publicBrandTitle,
         String publicBrandSubtitle,
-        String publicDomainWhitelist,
-        Boolean notifyEnabled,
-        String notifyChannel,
-        String notifyWebhookUrl,
-        Boolean notifyOrderNowEnabled,
-        Boolean notifyOrderReservationEnabled
+        String publicDomainWhitelist
     ) {
         var ext = settingsService.getOrInitSettings();
         var spec = ext.getSpec();
-        if (accessMode != null || accessPassword != null || publicAccessUrl != null || publicLogoUrl != null
-            || publicSiteTitle != null || publicBrandTitle != null || publicBrandSubtitle != null || publicDomainWhitelist != null) {
-            spec.setAccessMode(settingsService.normalizeAccessMode(accessMode));
-            spec.setAccessPassword(accessPassword == null ? "" : accessPassword.trim());
-            spec.setPublicAccessUrl(settingsService.normalizePublicAccessUrl(publicAccessUrl));
-            spec.setPublicLogoUrl(settingsService.normalizeLogoUrl(publicLogoUrl));
-           
-            if (publicSiteTitle != null) {
-                spec.setPublicSiteTitle(settingsService.normalizePublicText(publicSiteTitle, 80));
-            }
-            if (publicBrandTitle != null) {
-                spec.setPublicBrandTitle(settingsService.normalizePublicText(publicBrandTitle, 60));
-            }
-            if (publicBrandSubtitle != null) {
-                spec.setPublicBrandSubtitle(settingsService.normalizePublicText(publicBrandSubtitle, 400));
-            }
-            spec.setPublicDomainWhitelist(settingsService.normalizeDomainWhitelist(publicDomainWhitelist));
-            syncSiteRouterCache(spec);
-        }
-        if (notifyEnabled != null || notifyChannel != null || notifyWebhookUrl != null
-            || notifyOrderNowEnabled != null || notifyOrderReservationEnabled != null) {
-            spec.setNotifyEnabled(Boolean.TRUE.equals(notifyEnabled));
-            spec.setNotifyChannel(notifyChannel == null ? "" : notifyChannel.trim());
-            spec.setNotifyWebhookUrl(notifyWebhookUrl == null ? "" : notifyWebhookUrl.trim());
-            spec.setNotifyOrderNowEnabled(notifyOrderNowEnabled == null || notifyOrderNowEnabled);
-            spec.setNotifyOrderReservationEnabled(Boolean.TRUE.equals(notifyOrderReservationEnabled));
-        }
+        spec.setAccessMode(settingsService.normalizeAccessMode(accessMode));
+        spec.setAccessPassword(accessPassword == null ? "" : accessPassword.trim());
+        spec.setPublicAccessUrl(settingsService.normalizePublicAccessUrl(publicAccessUrl));
+        spec.setPublicLogoUrl(settingsService.normalizeLogoUrl(publicLogoUrl));
+        spec.setPublicSiteTitle(settingsService.normalizePublicText(publicSiteTitle, 80));
+        spec.setPublicBrandTitle(settingsService.normalizePublicText(publicBrandTitle, 60));
+        spec.setPublicBrandSubtitle(settingsService.normalizePublicText(publicBrandSubtitle, 400));
+        spec.setPublicDomainWhitelist(settingsService.normalizeDomainWhitelist(publicDomainWhitelist));
+        syncSiteRouterCache(spec);
         ext.setSpec(spec);
         settingsService.saveSettings(ext);
         return ApiPayloads.updatedOnly();

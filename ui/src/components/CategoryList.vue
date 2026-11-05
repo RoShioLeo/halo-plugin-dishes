@@ -99,9 +99,10 @@ function handleSorted() {
               >
                 <template #prepend>
                   <div
-                    class=":uno: drag-element absolute inset-y-0 left-0 hidden w-3.5 cursor-move items-center bg-gray-100 transition-all group-hover:flex hover:bg-gray-200"
+                    class="category-drag-handle drag-element"
+                    title="拖动排序"
                   >
-                    <IconList class=":uno: size-3.5" />
+                    <IconList aria-hidden="true" />
                   </div>
                 </template>
                 <template #start>
@@ -144,6 +145,29 @@ function handleSorted() {
   background: var(--ls-dishes-soft, #f7f7f8);
 }
 
+.category-drag-handle {
+  position: absolute;
+  inset-block: 0;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  cursor: move;
+  color: var(--ls-dishes-muted, #6b6b75);
+  opacity: 0;
+}
+
+.category-drag-handle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.category-entity:hover .category-drag-handle,
+.category-entity:focus-within .category-drag-handle {
+  opacity: 1;
+}
+
 .category-card :deep(table.category-table) {
   table-layout: fixed;
   width: 100%;
@@ -153,10 +177,11 @@ function handleSorted() {
 .category-card :deep(.entity-start-wrapper) {
   width: auto;
   vertical-align: middle;
+  padding-left: 32px;
   padding-right: 8px;
 }
 
-/* 右侧「�」固定宽度，避免再出现大块留白，也不挤压名称 */
+/* 数量和菜单使用固定宽度，保留分类名称的可用空间。 */
 .category-card :deep(.entity-end-wrapper) {
   width: 6.5rem;
   max-width: 6.5rem;

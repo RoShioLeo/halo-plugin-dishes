@@ -107,8 +107,7 @@ onMounted(() => {
 
     <div v-if="showPasswordModal" class="access-mask">
       <div class="access-card" role="dialog" aria-modal="true" aria-labelledby="dishes-access-title">
-        <h3 id="dishes-access-title" class="access-title">欢迎来到柠檬私厨</h3>
-        <p class="access-desc">请输入前台访问密码，验证通过后本地缓存生效。</p>
+        <h3 id="dishes-access-title" class="access-title">访问密码</h3>
         <label for="dishes-access-password" class="sr-only">访问密码</label>
         <input
           id="dishes-access-password"
@@ -120,14 +119,13 @@ onMounted(() => {
           @keyup.enter="submitPasswordAccess"
         />
         <p v-if="authError" class="access-error">{{ authError }}</p>
-        <button class="access-btn" :disabled="submitting" @click="submitPasswordAccess">验证并进入</button>
+        <button class="access-btn" :disabled="submitting" @click="submitPasswordAccess">进入</button>
       </div>
     </div>
 
     <div v-if="showGuardFallback" class="access-mask">
       <div class="access-card">
-        <h3 class="access-title">访问校验异常</h3>
-        <p class="access-desc">未能正确获取鉴权状态，请重试。</p>
+        <h3 class="access-title">暂时无法访问</h3>
         <p v-if="authError" class="access-error">{{ authError }}</p>
         <button class="access-btn" @click="refreshAccessStatus">重试</button>
       </div>
@@ -171,60 +169,4 @@ onMounted(() => {
   }
 }
 
-.access-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgb(15 23 42 / 0.35);
-  padding: 1rem;
-}
-
-.access-card {
-  width: min(100%, 24rem);
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 12px 40px rgb(15 23 42 / 0.2);
-  padding: 1rem;
-}
-
-.access-title {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.access-desc {
-  margin: 0.5rem 0 0.75rem;
-  color: #64748b;
-  font-size: 0.875rem;
-}
-
-.access-input {
-  width: 100%;
-  height: 2.5rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  padding: 0 0.75rem;
-  outline: none;
-}
-
-.access-btn {
-  margin-top: 0.75rem;
-  width: 100%;
-  height: 2.5rem;
-  border: none;
-  border-radius: 8px;
-  background: #0f172a;
-  color: #fff;
-  font-size: 0.875rem;
-}
-
-.access-error {
-  margin: 0.5rem 0 0;
-  font-size: 0.8125rem;
-  color: #dc2626;
-}
 </style>

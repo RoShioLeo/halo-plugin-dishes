@@ -50,20 +50,6 @@ public class DishesSettings extends AbstractExtension {
         @Schema(description = "前台域名白名单（逗号或换行分隔，留空表示不限制）")
         private String publicDomainWhitelist;
 
-        @Schema(description = "是否开启通知功能（预留）")
-        private Boolean notifyEnabled;
-
-        @Schema(description = "通知方式（预留）")
-        private String notifyChannel;
-
-        @Schema(description = "企业微信群机器人 Webhook 地址")
-        private String notifyWebhookUrl;
-
-        @Schema(description = "是否开启立即点菜通知")
-        private Boolean notifyOrderNowEnabled;
-
-        @Schema(description = "是否开启预约点菜通知")
-        private Boolean notifyOrderReservationEnabled;
     }
 }
 

@@ -1,37 +1,41 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import KitchenIcon from '@/components/KitchenIcon.vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import AppearanceControl from '@/components/AppearanceControl.vue'
-
+import { kitchenViewer, loadViewer, mealContext } from '@/api/kitchen'
 const route = useRoute()
-
-const mainBottomPad = computed(() =>
-  route.name === 'order'
-    ? 'pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]'
-    : '',
-)
+const homeLink = computed(() => ({ path: '/', query: { date: mealContext.value.date } }))
+const orderLink = computed(() => ({ path: '/order', query: { ...mealContext.value } }))
+const header = ref<HTMLElement | null>(null)
+const menuToggle = ref<HTMLButtonElement | null>(null)
+const navOpen = ref(false)
+const mobile = window.matchMedia('(max-width: 760px)')
+function closeNav(returnFocus = false) { navOpen.value = false; if (returnFocus) menuToggle.value?.focus() }
+function toggleNav() { navOpen.value = !navOpen.value }
+function outside(event: MouseEvent) { if (event.target instanceof Node && !header.value?.contains(event.target)) closeNav() }
+function escape(event: KeyboardEvent) { if (event.key === 'Escape' && navOpen.value) { event.preventDefault(); closeNav(true) } }
+function resized() { if (!mobile.matches) closeNav() }
+watch(() => route.fullPath, () => closeNav())
+onMounted(() => {
+  void loadViewer().catch(() => { /* Each page provides its API retry. */ })
+  document.addEventListener('click', outside)
+  document.addEventListener('keydown', escape)
+  mobile.addEventListener('change', resized)
+})
+onUnmounted(() => { document.removeEventListener('click', outside); document.removeEventListener('keydown', escape); mobile.removeEventListener('change', resized) })
 </script>
-
 <template>
-  <div
-    class="ls-shell mx-auto flex h-dvh max-h-dvh min-h-0 w-full flex-col overflow-hidden text-slate-900 antialiased"
-  >
-    <nav class="ls-site-nav" aria-label="站点导航">
-      <a class="ls-back-blog" href="https://blog.lemonslice.cloud/">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m10 6-6 6 6 6M4 12h16" stroke-linecap="round" stroke-linejoin="round" /></svg>
-        <span>柠檬汽水池</span>
-      </a>
-      <div class="ls-site-nav__actions">
-        <RouterLink to="/" :aria-current="route.name === 'home' ? 'page' : undefined">私厨首页</RouterLink>
-        <RouterLink to="/order" :aria-current="route.name === 'order' ? 'page' : undefined">点菜</RouterLink>
-        <AppearanceControl />
-      </div>
-    </nav>
-    <main
-      class="flex min-h-0 flex-1 flex-col overflow-hidden px-4"
-      :class="mainBottomPad"
-    >
-      <slot />
-    </main>
+  <div class="ls-shell">
+    <header ref="header" class="ls-site-nav">
+      <a class="ls-back-blog" href="https://blog.lemonslice.cloud/"><KitchenIcon name="arrow-left-s-line" /><span>主站</span></a>
+      <nav id="kitchen-navigation" class="ls-site-links" :class="navOpen ? 'is-open' : ''" aria-label="主导航">
+        <RouterLink :to="homeLink" :aria-current="route.name === 'home' ? 'page' : undefined" @click="closeNav()">当日菜单</RouterLink>
+        <RouterLink :to="orderLink" :aria-current="route.name === 'order' ? 'page' : undefined" @click="closeNav()">看看吃啥</RouterLink>
+        <a v-if="kitchenViewer?.canManage" href="/console/dishes/orders" @click="closeNav()">厨房工作台</a>
+      </nav>
+      <div class="ls-site-tools"><AppearanceControl /><button ref="menuToggle" type="button" class="ls-mobile-menu" :aria-expanded="navOpen" aria-controls="kitchen-navigation" :aria-label="navOpen ? '收起导航' : '展开导航'" @click="toggleNav"><KitchenIcon name="menu-line" /></button></div>
+    </header>
+    <main class="ls-main"><slot /></main>
   </div>
 </template>

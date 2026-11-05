@@ -41,6 +41,7 @@ public class DishesPlugin extends BasePlugin {
 
     @Override
     public void stop() {
+        extensionSchemeRegistry.unregisterOwnedSchemes();
         log.info("Dishes plugin stopped.");
     }
 }

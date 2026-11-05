@@ -27,6 +27,13 @@ class ApiExceptionHandlerTest {
         assertNotNull(response.getBody());
         assertEquals(false, response.getBody().ok());
         assertEquals("notfound", response.getBody().message());
-        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+    }
+
+    @Test
+    void malformedRequestBodyUsesBadRequest() {
+        var response = handler.handleInvalidBody(new org.springframework.web.server.ServerWebInputException("Bad JSON"));
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals("DISHES_INVALID_REQUEST", response.getBody().code());
     }
 }

@@ -28,8 +28,17 @@ tasks.register('pnpmCheck', PnpmTask) {
     dependsOn tasks.named('pnpmInstall')
 }
 
+tasks.register('pnpmPublicCheck', PnpmTask) {
+    group = 'verification'
+    description = 'Verify public custom-dish rendering against kitchen changes'
+    args = ['exec', 'vitest', 'run', '--root', '../web-frontend',
+        '--config', '../web-frontend/vite.config.ts', 'tests/kitchenRendering.spec.ts']
+    dependsOn tasks.named('pnpmInstall')
+}
+
 tasks.named('check') {
     dependsOn tasks.named('pnpmCheck')
+    dependsOn tasks.named('pnpmPublicCheck')
 }
 
 tasks.named('assemble') {

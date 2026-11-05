@@ -1,8 +1,6 @@
 package com.dishes.service.dto;
 
-import com.dishes.domain.DishesStore;
 import com.dishes.extension.DishesSettings;
-import java.time.LocalDate;
 import java.util.Map;
 
 public final class ApiPayloads {
@@ -29,27 +27,6 @@ public final class ApiPayloads {
         return Map.of("items", items);
     }
 
-    public static Map<String, Object> pagedRange(LocalDate fromDate, LocalDate toDate, Map<String, Object> result) {
-        return Map.of(
-            "range", Map.of("from", fromDate.toString(), "to", toDate.toString()),
-            "items", result.get("items"),
-            "meta", Map.of("total", result.get("total"), "limit", result.get("limit"), "offset", result.get("offset"))
-        );
-    }
-
-    public static Map<String, Object> orderDetail(DishesStore.Order order, Object orderApi) {
-        return Map.of(
-            "id", order.id(),
-            "orderDate", order.orderDate().toString(),
-            "mealPeriod", Map.of(
-                "id", order.mealPeriod().id(),
-                "code", order.mealPeriod().code(),
-                "name", order.mealPeriod().name()
-            ),
-            "order", orderApi
-        );
-    }
-
     public static Map<String, Object> settingsPayload(DishesSettings.Spec spec, String mode) {
         return Map.of(
             "basic", Map.of(
@@ -63,13 +40,6 @@ public final class ApiPayloads {
                 "publicBrandSubtitle", spec.getPublicBrandSubtitle() == null ? "" : spec.getPublicBrandSubtitle(),
                 "publicDomainWhitelist", spec.getPublicDomainWhitelist() == null ? "" : spec.getPublicDomainWhitelist(),
                 "defaultPublicAccessUrl", "/dishes"
-            ),
-            "notify", Map.of(
-                "enabled", spec.getNotifyEnabled() != null && spec.getNotifyEnabled(),
-                "channel", spec.getNotifyChannel() == null ? "" : spec.getNotifyChannel(),
-                "webhookUrl", spec.getNotifyWebhookUrl() == null ? "" : spec.getNotifyWebhookUrl(),
-                "orderNowEnabled", spec.getNotifyOrderNowEnabled() == null || spec.getNotifyOrderNowEnabled(),
-                "orderReservationEnabled", spec.getNotifyOrderReservationEnabled() != null && spec.getNotifyOrderReservationEnabled()
             )
         );
     }

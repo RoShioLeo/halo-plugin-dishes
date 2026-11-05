@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 
-type ColorMode = 'system' | 'light' | 'dark'
+export type ColorMode = 'system' | 'light' | 'dark'
 
 const storageKey = 'lemonslice-color-mode'
 const systemScheme = window.matchMedia('(prefers-color-scheme: dark)')
@@ -16,6 +16,7 @@ function readMode(): ColorMode {
 }
 
 export const colorMode = ref<ColorMode>(readMode())
+export const resolvedColorScheme = ref<'light' | 'dark'>('light')
 export const colorModeLabels = { system: '跟随系统', light: '浅色', dark: '深色' }
 
 function applyMode() {
@@ -23,6 +24,7 @@ function applyMode() {
   const scheme = colorMode.value === 'system'
     ? (systemScheme.matches ? 'dark' : 'light')
     : colorMode.value
+  resolvedColorScheme.value = scheme
   root.classList.add('lemon-dishes')
   root.dataset.colorMode = colorMode.value
   root.dataset.colorScheme = scheme
@@ -31,15 +33,15 @@ function applyMode() {
   if (meta) meta.content = scheme === 'dark' ? '#15171b' : '#ffffff'
 }
 
-export function cycleColorMode() {
-  const modes: ColorMode[] = ['system', 'light', 'dark']
-  colorMode.value = modes[(modes.indexOf(colorMode.value) + 1) % modes.length] ?? 'system'
-  try {
-    window.localStorage.setItem(storageKey, colorMode.value)
-  } catch {
-    // Appearance still changes when browser storage is unavailable.
-  }
+export function setColorMode(mode: ColorMode) {
+  colorMode.value = mode
+  try { window.localStorage.setItem(storageKey, mode) } catch { /* Apply without persistence. */ }
   applyMode()
+}
+
+export function cycleColorMode() {
+  const modes: ColorMode[] = ['light', 'dark', 'system']
+  setColorMode(modes[(modes.indexOf(colorMode.value) + 1) % modes.length] ?? 'light')
 }
 
 systemScheme.addEventListener('change', applyMode)

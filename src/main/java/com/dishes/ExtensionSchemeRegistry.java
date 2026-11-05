@@ -5,13 +5,14 @@ import static run.halo.app.extension.index.IndexAttributeFactory.simpleAttribute
 import com.dishes.extension.Dish;
 import com.dishes.extension.DishCategory;
 import com.dishes.extension.DishesSettings;
-import com.dishes.extension.MealOrder;
+import com.dishes.extension.MealTicketState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import run.halo.app.extension.Extension;
 import run.halo.app.extension.Scheme;
 import run.halo.app.extension.SchemeManager;
+import run.halo.app.extension.exception.SchemeNotFoundException;
 import run.halo.app.extension.index.IndexSpec;
 
 @Component
@@ -28,17 +29,34 @@ public class ExtensionSchemeRegistry {
     public synchronized void ensureRegistered() {
         ensureDishCategory();
         ensureDish();
-        ensureMealOrder();
         ensureDishesSettings();
+        ensureKitchen();
     }
 
     public synchronized void rebuildAll() {
         unregisterIfPresent(DishCategory.class);
         unregisterIfPresent(Dish.class);
-        unregisterIfPresent(MealOrder.class);
         unregisterIfPresent(DishesSettings.class);
+        unregisterIfPresent(MealTicketState.class);
         ensureRegistered();
         log.warn("Rebuilt all extension schemes and indexes due to index inconsistency.");
+    }
+
+    /** Release this plugin instance's registrations, retaining persisted extension data. */
+    public synchronized void unregisterOwnedSchemes() {
+        for (var type : java.util.List.of(MealTicketState.class, DishesSettings.class, Dish.class, DishCategory.class)) {
+            Scheme existing;
+            try {
+                existing = schemeManager.get(type);
+            } catch (SchemeNotFoundException ex) {
+                continue;
+            }
+            // An older plugin instance must not remove a newer instance's registration.
+            if (existing.type() == type) {
+                schemeManager.unregister(existing);
+                log.info("Unregistered owned scheme for {}", type.getName());
+            }
+        }
     }
 
     private void ensureDishCategory() {
@@ -67,23 +85,6 @@ public class ExtensionSchemeRegistry {
         log.info("Registered scheme for {}", Dish.class.getName());
     }
 
-    private void ensureMealOrder() {
-        if (hasScheme(MealOrder.class)) {
-            return;
-        }
-        schemeManager.register(MealOrder.class, indexSpecs -> {
-            indexSpecs.add(new IndexSpec()
-                .setName("spec.orderDate")
-                .setIndexFunc(simpleAttribute(MealOrder.class, x ->
-                    x.getSpec() == null ? null : x.getSpec().getOrderDate())));
-            indexSpecs.add(new IndexSpec()
-                .setName("spec.mealPeriodCode")
-                .setIndexFunc(simpleAttribute(MealOrder.class, x ->
-                    x.getSpec() == null ? null : x.getSpec().getMealPeriodCode())));
-        });
-        log.info("Registered scheme for {}", MealOrder.class.getName());
-    }
-
     private void ensureDishesSettings() {
         if (hasScheme(DishesSettings.class)) {
             return;
@@ -92,12 +93,22 @@ public class ExtensionSchemeRegistry {
         log.info("Registered scheme for {}", DishesSettings.class.getName());
     }
 
+    private void ensureKitchen() {
+        if (!hasScheme(MealTicketState.class)) schemeManager.register(MealTicketState.class);
+    }
+
     private boolean hasScheme(Class<? extends Extension> type) {
+        Scheme existing;
         try {
-            return schemeManager.get(type) != null;
-        } catch (Exception ex) {
+            existing = schemeManager.get(type);
+        } catch (SchemeNotFoundException ex) {
             return false;
         }
+        if (existing.type() == type) return true;
+        // SchemeManager resolves by GVK, so hot upgrades can leave a previous classloader's type.
+        schemeManager.unregister(existing);
+        log.info("Replacing stale classloader scheme for {}", type.getName());
+        return false;
     }
 
     private void unregisterIfPresent(Class<? extends Extension> type) {
@@ -107,8 +118,8 @@ public class ExtensionSchemeRegistry {
                 schemeManager.unregister(scheme);
                 log.info("Unregistered scheme for {}", type.getName());
             }
-        } catch (Exception ex) {
-            log.debug("Skip unregister for {} due to: {}", type.getName(), ex.getMessage());
+        } catch (SchemeNotFoundException ex) {
+            log.debug("Scheme already absent for {}", type.getName());
         }
     }
 }

@@ -13,7 +13,6 @@ import {
   VPageHeader,
   VPagination,
   VSpace,
-  VSwitch,
 } from '@halo-dev/components'
 import { utils } from '@halo-dev/ui-shared'
 import { deleteData, getApiErrorMessage, getData, postData, putData } from '@/api/client'
@@ -21,6 +20,8 @@ import CategoryList from '@/components/CategoryList.vue'
 import CategoryEditingModal from '@/components/CategoryEditingModal.vue'
 import DishEditingModal from '@/components/DishEditingModal.vue'
 import RiRestaurant2Line from '~icons/ri/restaurant-2-line'
+import RiCheckLine from '~icons/ri/check-line'
+import RiCloseLine from '~icons/ri/close-line'
 
 type Dish = {
   id: number
@@ -31,23 +32,28 @@ type Dish = {
   recommendationLevel: number
   description?: string | null
   isAvailable: boolean
+  soldOut?: boolean
   sortOrder: number
-  mealPeriodIds: number[]
+  tags: string[]
 }
 
 type Category = { id: number; name: string; slug: string; sortOrder: number }
-type Period = { id: number; code: 'breakfast' | 'lunch' | 'dinner'; name: string }
-
-const PERIODS: Period[] = [
-  { id: 1, code: 'breakfast', name: '早餐' },
-  { id: 2, code: 'lunch', name: '午餐' },
-  { id: 3, code: 'dinner', name: '晚餐' },
-]
 
 const loading = ref(true)
 const error = ref<string | null>(null)
 const dishes = ref<Dish[]>([])
 const categories = ref<Category[]>([])
+const availableTags = ref<string[]>(['早餐', '午餐', '晚餐'])
+const mealTagNames = ['早餐', '午餐', '晚餐']
+
+function dishMeals(dish: Dish) {
+  const meals = mealTagNames.filter((tag) => dish.tags?.includes(tag))
+  return meals.length && meals.length < mealTagNames.length ? meals.join(' / ') : '全天'
+}
+
+function dishCustomTags(dish: Dish) {
+  return dish.tags?.filter((tag) => !mealTagNames.includes(tag)).join(' / ') || '—'
+}
 
 const selectedCategoryId = ref<number | undefined>(undefined)
 const q = ref('')
@@ -62,7 +68,6 @@ const dishSaving = ref(false)
 const attachmentModalOpen = ref(false)
 const checkedAll = ref(false)
 const selectedDishIds = ref<Set<number>>(new Set())
-const availabilityUpdating = ref<Set<number>>(new Set())
 
 const categoryModalOpen = ref(false)
 const categoryModalMode = ref<'create' | 'edit'>('create')
@@ -76,15 +81,16 @@ const dishForm = reactive({
   recommendationLevel: 3,
   description: '',
   isAvailable: true,
+  soldOut: false,
   sortOrder: 0,
-  mealPeriodIds: [] as number[],
+  tags: [] as string[],
 })
 
 const dishErrors = reactive<{
   name?: string
   categoryId?: string
   recommendationLevel?: string
-  mealPeriodIds?: string
+  tags?: string
   imageUrl?: string
 }>({})
 
@@ -102,7 +108,9 @@ const sortedCategories = computed(() =>
 
 const hasCategories = computed(() => sortedCategories.value.length > 0)
 
-const categoryOptions = computed(() => sortedCategories.value.map((c) => ({ value: c.id, label: c.name })))
+const categoryOptions = computed(() =>
+  sortedCategories.value.map((c) => ({ value: c.id, label: c.name })),
+)
 
 const categoryCountMap = computed(() => {
   const map = new Map<number, number>()
@@ -116,7 +124,9 @@ function dishCountForCategory(categoryId: number) {
   return categoryCountMap.value.get(categoryId) ?? 0
 }
 
-async function handleCategoriesSorted(rows: { id: number; name: string; slug: string; sortOrder: number }[]) {
+async function handleCategoriesSorted(
+  rows: { id: number; name: string; slug: string; sortOrder: number }[],
+) {
   // 更新本地顺序
   categories.value = rows.map((c, index) => ({
     ...c,
@@ -162,7 +172,8 @@ const filteredDishes = computed(() => {
     .slice()
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id)
     .filter((d) => {
-      if (selectedCategoryId.value != null && d.categoryId !== selectedCategoryId.value) return false
+      if (selectedCategoryId.value != null && d.categoryId !== selectedCategoryId.value)
+        return false
       if (keyword && !d.name.toLowerCase().includes(keyword)) return false
       if (avail === 'on' && !d.isAvailable) return false
       if (avail === 'off' && d.isAvailable) return false
@@ -188,7 +199,10 @@ watch([q, selectedCategoryId, filterAvailable], () => {
 watch(
   () => categoryForm.name,
   (v) => {
-    if (categoryModalMode.value === 'create' && (!categoryForm.slug || categoryForm.slug.trim() === '')) {
+    if (
+      categoryModalMode.value === 'create' &&
+      (!categoryForm.slug || categoryForm.slug.trim() === '')
+    ) {
       const next = normalizeSlug(v || '')
       if (next) categoryForm.slug = next
     }
@@ -202,12 +216,6 @@ watch(
     if (categoryErrors.slug) categoryErrors.slug = undefined
   },
 )
-
-function periodNames(ids: number[]) {
-  const set = new Set(ids || [])
-  const names = PERIODS.filter((p) => set.has(p.id)).map((p) => p.name)
-  return names.length ? names.join(' / ') : '未设置'
-}
 
 function normalizeSlug(slug: string) {
   return slug
@@ -223,7 +231,7 @@ function resetDishErrors() {
   dishErrors.name = undefined
   dishErrors.categoryId = undefined
   dishErrors.recommendationLevel = undefined
-  dishErrors.mealPeriodIds = undefined
+  dishErrors.tags = undefined
   dishErrors.imageUrl = undefined
 }
 
@@ -282,10 +290,11 @@ async function load() {
   error.value = null
   try {
     const [dishRes, catRes] = await Promise.all([
-      getData<{ items: Dish[] }>('/dishes'),
+      getData<{ items: Dish[]; tags: string[] }>('/dishes'),
       getData<{ items: Category[] }>('/categories'),
     ])
     dishes.value = dishRes.items ?? []
+    availableTags.value = [...new Set(['早餐', '午餐', '晚餐', ...(dishRes.tags ?? [])])]
     categories.value = catRes.items ?? []
   } catch (e) {
     error.value = getApiErrorMessage(e, '加载失败，请稍后重试')
@@ -307,8 +316,9 @@ function openCreateDish() {
   dishForm.recommendationLevel = 3
   dishForm.description = ''
   dishForm.isAvailable = true
+  dishForm.soldOut = false
   dishForm.sortOrder = 0
-  dishForm.mealPeriodIds = [2, 3]
+  dishForm.tags = []
   resetDishErrors()
   dishModalOpen.value = true
 }
@@ -327,8 +337,9 @@ function openEditDish(d: Dish) {
   dishForm.recommendationLevel = d.recommendationLevel ?? 3
   dishForm.description = d.description ?? ''
   dishForm.isAvailable = !!d.isAvailable
+  dishForm.soldOut = !!d.soldOut
   dishForm.sortOrder = d.sortOrder ?? 0
-  dishForm.mealPeriodIds = Array.isArray(d.mealPeriodIds) ? [...d.mealPeriodIds] : []
+  dishForm.tags = Array.isArray(d.tags) ? [...d.tags] : []
   resetDishErrors()
   dishModalOpen.value = true
 }
@@ -340,34 +351,6 @@ function isChecked(d: Dish) {
 function toggleDishSelection(d: Dish) {
   if (selectedDishIds.value.has(d.id)) selectedDishIds.value.delete(d.id)
   else selectedDishIds.value.add(d.id)
-}
-
-async function updateDishAvailability(d: Dish, isAvailable: boolean) {
-  if (availabilityUpdating.value.has(d.id)) return
-  availabilityUpdating.value.add(d.id)
-  try {
-    await putData(`/dishes/${d.id}`, {
-      categoryId: Number(d.categoryId),
-      name: d.name,
-      imageUrl: d.imageUrl || null,
-      recommendationLevel: Number(d.recommendationLevel) || 3,
-      description: d.description || null,
-      isAvailable,
-      sortOrder: Number(d.sortOrder) || 0,
-      mealPeriodIds: (d.mealPeriodIds || []).map((x) => Number(x)).filter((x) => x === 1 || x === 2 || x === 3),
-    })
-    d.isAvailable = isAvailable
-    Toast.success(isAvailable ? '已上架' : '已下架')
-  } catch (e) {
-    Dialog.error({
-      title: '更新状态失败',
-      description: getApiErrorMessage(e, '更新状态失败，请稍后重试', {
-        DISHES_BAD_REQUEST: '状态更新参数不合法，请刷新后重试',
-      }),
-    })
-  } finally {
-    availabilityUpdating.value.delete(d.id)
-  }
 }
 
 function handleCheckAllChange(e: Event) {
@@ -387,13 +370,6 @@ function setFilterAvailable(value: 'all' | 'on' | 'off') {
   filterAvailable.value = value
 }
 
-function togglePeriod(id: number) {
-  const set = new Set(dishForm.mealPeriodIds)
-  if (set.has(id)) set.delete(id)
-  else set.add(id)
-  dishForm.mealPeriodIds = [...set].sort((a, b) => a - b)
-}
-
 async function saveDish() {
   const name = dishForm.name.trim()
   resetDishErrors()
@@ -401,7 +377,9 @@ async function saveDish() {
   if (!dishForm.categoryId) dishErrors.categoryId = '请选择分类'
   const rl = Number(dishForm.recommendationLevel)
   if (!Number.isFinite(rl) || rl < 1 || rl > 5) dishErrors.recommendationLevel = '推荐等级需为 1-5'
-  if (!Array.isArray(dishForm.mealPeriodIds) || dishForm.mealPeriodIds.length === 0) dishErrors.mealPeriodIds = '请至少选择一个餐段'
+  dishForm.tags = [...new Set(dishForm.tags.map((tag) => tag.trim()).filter(Boolean))]
+  if (dishForm.tags.length > 16 || dishForm.tags.some((tag) => tag.length > 24))
+    dishErrors.tags = '最多 16 个标签，每个不超过 24 字'
   const rawImage = (dishForm.imageUrl || '').trim()
   if (rawImage && !/^https?:\/\//i.test(rawImage) && !rawImage.startsWith('/')) {
     dishErrors.imageUrl = '图片 URL 需为 http(s) 链接或站内相对路径（以 / 开头）'
@@ -417,8 +395,9 @@ async function saveDish() {
       recommendationLevel: Number(dishForm.recommendationLevel) || 3,
       description: dishForm.description.trim() || null,
       isAvailable: !!dishForm.isAvailable,
+      soldOut: !!dishForm.soldOut,
       sortOrder: Number(dishForm.sortOrder) || 0,
-      mealPeriodIds: dishForm.mealPeriodIds.map((x) => Number(x)).filter((x) => x === 1 || x === 2 || x === 3),
+      tags: [...dishForm.tags],
     }
     if (dishModalMode.value === 'create') await postData<{ id: number }>('/dishes', payload)
     else if (editingDishId.value != null) await putData(`/dishes/${editingDishId.value}`, payload)
@@ -428,9 +407,9 @@ async function saveDish() {
   } catch (e) {
     const msg = getApiErrorMessage(e, '保存失败，请稍后重试')
     if (msg.includes('菜品名称')) dishErrors.name = msg
-    else if (msg.includes('category_id') || msg.includes('分类')) dishErrors.categoryId = msg
+    else if (msg.includes('分类')) dishErrors.categoryId = msg
     else if (msg.includes('推荐等级') || msg.includes('1-5')) dishErrors.recommendationLevel = msg
-    else if (msg.includes('餐段')) dishErrors.mealPeriodIds = msg
+    else if (msg.includes('标签')) dishErrors.tags = msg
     else if (msg.includes('图片') || msg.toLowerCase().includes('url')) dishErrors.imageUrl = msg
     else Dialog.error({ title: '保存失败', description: msg })
   } finally {
@@ -525,7 +504,8 @@ async function saveCategory() {
   try {
     const payload = { name, slug, sortOrder: Number(categoryForm.sortOrder) || 0 }
     if (categoryModalMode.value === 'create') await postData('/categories', payload)
-    else if (editingCategoryId.value != null) await putData(`/categories/${editingCategoryId.value}`, payload)
+    else if (editingCategoryId.value != null)
+      await putData(`/categories/${editingCategoryId.value}`, payload)
     categoryModalOpen.value = false
     Toast.success('分类已保存')
     await load()
@@ -590,12 +570,11 @@ watch(
     :saving="dishSaving"
     :form="dishForm"
     :errors="dishErrors"
-    :periods="PERIODS"
+    :available-tags="availableTags"
     :category-options="categoryOptions"
     @close="dishModalOpen = false"
     @save="saveDish"
     @delete="removeEditingDish"
-    @toggle-period="togglePeriod"
     @open-attachment="attachmentModalOpen = true"
   />
 
@@ -607,10 +586,22 @@ watch(
     :errors="categoryErrors"
     @close="categoryModalOpen = false"
     @save="saveCategory"
-    @delete="removeCategory({ id: editingCategoryId!, name: categoryForm.name, slug: categoryForm.slug, sortOrder: categoryForm.sortOrder })"
+    @delete="
+      removeCategory({
+        id: editingCategoryId!,
+        name: categoryForm.name,
+        slug: categoryForm.slug,
+        sortOrder: categoryForm.sortOrder,
+      })
+    "
   />
 
-  <AttachmentSelectorModal v-model:visible="attachmentModalOpen" :max="1" :accepts="['image/*']" @select="onAttachmentSelect" />
+  <AttachmentSelectorModal
+    v-model:visible="attachmentModalOpen"
+    :max="1"
+    :accepts="['image/*']"
+    @select="onAttachmentSelect"
+  />
 
   <VPageHeader title="菜品管理">
     <template #icon>
@@ -642,7 +633,9 @@ watch(
           <template #header>
             <div class="dishes-toolbar :uno: block w-full px-4 py-4">
               <div class="dishes-toolbar-row :uno: flex items-center justify-between gap-4">
-                <div class=":uno: flex items-center gap-2 box-border border border-gray-300 rounded-base">
+                <div
+                  class=":uno: flex items-center gap-2 box-border border border-gray-300 rounded-base"
+                >
                   <input
                     v-model="q"
                     class=":uno: h-9 w-48 rounded-md border border-gray-200 bg-white px-3 text-sm outline-none focus:border-primary"
@@ -652,20 +645,29 @@ watch(
 
                 <div class="dishes-toolbar-actions :uno: flex items-center gap-2">
                   <VDropdown>
-                    <VButton size="sm" type="secondary" class="toolbar-btn">{{ filterAvailableLabel }}</VButton>
+                    <VButton size="sm" type="secondary" class="toolbar-btn">{{
+                      filterAvailableLabel
+                    }}</VButton>
                     <template #popper>
                       <VDropdownItem @click="setFilterAvailable('all')">全部状态</VDropdownItem>
                       <VDropdownItem @click="setFilterAvailable('on')">已上架</VDropdownItem>
                       <VDropdownItem @click="setFilterAvailable('off')">已下架</VDropdownItem>
                     </template>
                   </VDropdown>
-                  <VButton v-if="selectedDishIds.size" size="sm" type="danger" class="toolbar-btn" @click="removeSelectedDishes">
+                  <VButton
+                    v-if="selectedDishIds.size"
+                    size="sm"
+                    type="danger"
+                    class="toolbar-btn"
+                    @click="removeSelectedDishes"
+                  >
                     删除已选 {{ selectedDishIds.size }}
                   </VButton>
-                  <VButton size="sm" type="secondary" class="toolbar-btn" @click="openCreateDish()">新增菜品</VButton>
+                  <VButton size="sm" type="secondary" class="toolbar-btn" @click="openCreateDish()"
+                    >新增菜品</VButton
+                  >
                 </div>
               </div>
-
             </div>
           </template>
 
@@ -704,18 +706,22 @@ watch(
             <VEmpty message="请调整筛选或搜索条件" title="无匹配结果" />
           </Transition>
           <Transition v-else appear name="fade">
-            <div class=":uno:  overflow-x-auto">
+            <div class=":uno: overflow-x-auto">
               <table class=":uno: min-w-full table-fixed border-collapse">
                 <colgroup>
                   <col class=":uno: w-12" />
                   <col class=":uno: min-w-[14rem] w-56" />
                   <col class=":uno: w-24" />
                   <col class=":uno: w-30" />
+                  <col class=":uno: w-36" />
                   <col class=":uno: w-42" />
-                  <col class=":uno: w-24" />
-                  <col class=":uno: w-40" />
+                  <col class=":uno: w-16" />
+                  <col class=":uno: w-16" />
+                  <col class=":uno: w-36" />
                 </colgroup>
-                <thead class="dishes-table-head :uno: border-y border-gray-200 bg-gray-50 text-sm text-gray-600 font-semibold">
+                <thead
+                  class="dishes-table-head :uno: border-y border-gray-200 bg-gray-50 text-sm text-gray-600 font-semibold"
+                >
                   <tr>
                     <th class=":uno: px-3 py-2 text-left">
                       <input v-model="checkedAll" type="checkbox" @change="handleCheckAllChange" />
@@ -723,8 +729,10 @@ watch(
                     <th class=":uno: px-3 py-2 text-left">菜品名称</th>
                     <th class=":uno: px-3 py-2 text-left">菜品分类</th>
                     <th class=":uno: px-3 py-2 text-left">推荐星级</th>
-                    <th class=":uno: px-3 py-2 text-left">适用餐段</th>
-                    <th class=":uno: px-3 py-2 text-left">上架/下架</th>
+                    <th class=":uno: px-3 py-2 text-left">餐次</th>
+                    <th class=":uno: px-3 py-2 text-left">标签</th>
+                    <th class=":uno: px-3 py-2 text-center">上架</th>
+                    <th class=":uno: px-3 py-2 text-center">有货</th>
                     <th class=":uno: px-3 py-2 text-left">操作</th>
                   </tr>
                 </thead>
@@ -735,12 +743,21 @@ watch(
                     class="dish-row :uno: border-b border-gray-100 text-sm transition-colors hover:bg-gray-50"
                   >
                     <td class=":uno: px-3 py-3">
-                      <input :checked="isChecked(d)" type="checkbox" @change="toggleDishSelection(d)" />
+                      <input
+                        :checked="isChecked(d)"
+                        type="checkbox"
+                        @change="toggleDishSelection(d)"
+                      />
                     </td>
                     <td class=":uno: px-3 py-3">
                       <div class=":uno: min-w-0 flex items-center gap-3">
                         <div v-if="d.imageUrl" class="dish-thumb">
-                          <img class="dish-thumb__img" :src="dishThumbSrc(d.imageUrl)" :alt="d.name" loading="lazy" />
+                          <img
+                            class="dish-thumb__img"
+                            :src="dishThumbSrc(d.imageUrl)"
+                            :alt="d.name"
+                            loading="lazy"
+                          />
                         </div>
                         <div v-else class="dish-thumb dish-thumb--placeholder" aria-hidden="true">
                           <span class="dish-thumb__letter">{{ d.name.slice(0, 1) }}</span>
@@ -755,18 +772,40 @@ watch(
                     <td class=":uno: px-3 py-3 text-amber-500 tracking-wide">
                       {{ '★'.repeat(Math.max(1, Math.min(5, d.recommendationLevel || 1))) }}
                     </td>
-                    <td class="dish-meta :uno: px-3 py-3">{{ periodNames(d.mealPeriodIds) }}</td>
-                    <td class=":uno: px-3 py-3">
-                      <VSwitch
-                        :model-value="d.isAvailable"
-                        :disabled="availabilityUpdating.has(d.id)"
-                        @update:model-value="(value:boolean) => updateDishAvailability(d, value)"
-                      />
+                    <td class="dish-meta :uno: px-3 py-3">{{ dishMeals(d) }}</td>
+                    <td class="dish-meta :uno: px-3 py-3">{{ dishCustomTags(d) }}</td>
+                    <td class=":uno: px-3 py-3 text-center">
+                      <span
+                        class="dish-boolean"
+                        :class="{ 'is-false': !d.isAvailable }"
+                        role="img"
+                        :aria-label="d.isAvailable ? '已上架' : '未上架'"
+                        :title="d.isAvailable ? '已上架' : '未上架'"
+                      >
+                        <RiCheckLine v-if="d.isAvailable" aria-hidden="true" />
+                        <RiCloseLine v-else aria-hidden="true" />
+                      </span>
+                    </td>
+                    <td class=":uno: px-3 py-3 text-center">
+                      <span
+                        class="dish-boolean"
+                        :class="{ 'is-false': d.soldOut }"
+                        role="img"
+                        :aria-label="d.soldOut ? '缺货' : '有货'"
+                        :title="d.soldOut ? '缺货' : '有货'"
+                      >
+                        <RiCheckLine v-if="!d.soldOut" aria-hidden="true" />
+                        <RiCloseLine v-else aria-hidden="true" />
+                      </span>
                     </td>
                     <td class=":uno: px-3 py-3">
                       <VSpace class=":uno: gap-2">
-                        <VButton size="xs" type="secondary" class="op-btn" @click="openEditDish(d)">编辑</VButton>
-                        <VButton size="xs" type="danger" class="op-btn" @click="removeDish(d)">删除</VButton>
+                        <VButton size="xs" type="secondary" class="op-btn" @click="openEditDish(d)"
+                          >编辑</VButton
+                        >
+                        <VButton size="xs" type="danger" class="op-btn" @click="removeDish(d)"
+                          >删除</VButton
+                        >
                       </VSpace>
                     </td>
                   </tr>
@@ -777,7 +816,12 @@ watch(
 
           <template #footer>
             <div class=":uno: px-4 py-3">
-              <VPagination v-model:page="page" v-model:size="size" :total="filteredDishes.length" :size-options="[10, 20, 30, 50, 100]" />
+              <VPagination
+                v-model:page="page"
+                v-model:size="size"
+                :total="filteredDishes.length"
+                :size-options="[10, 20, 30, 50, 100]"
+              />
             </div>
           </template>
         </VCard>
@@ -787,6 +831,22 @@ watch(
 </template>
 
 <style scoped>
+.dish-boolean {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--ls-dishes-ink, #29292e);
+}
+.dish-boolean svg {
+  width: 16px;
+  height: 16px;
+}
+.dish-boolean.is-false {
+  color: var(--ls-dishes-muted, #6b6b75);
+  opacity: 0.5;
+}
 /* 不依赖 Uno 原子类：控制台里 w-68等可能未生成，侧栏会撑满整行导致右侧列表被挤出视口 */
 .dishes-layout {
   display: flex;

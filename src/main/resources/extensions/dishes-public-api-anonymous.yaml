@@ -17,10 +17,6 @@ rules:
       - "/plugins/dishes/public/*"
       - "/plugins/dishes/public/access/status"
       - "/plugins/dishes/public/access/password-verify"
-      - "/apis/plugins/dishes/public"
-      - "/apis/plugins/dishes/public/*"
-      - "/apis/plugins/dishes/public/access/status"
-      - "/apis/plugins/dishes/public/access/password-verify"
     verbs:
       - get
       - create

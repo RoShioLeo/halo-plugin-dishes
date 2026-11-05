@@ -1,7 +1,6 @@
 package com.dishes.service;
 
 import com.dishes.service.admin.AdminMenuService;
-import com.dishes.service.admin.AdminOrderService;
 import com.dishes.service.admin.AdminSettingsService;
 import java.util.List;
 import java.util.Map;
@@ -11,16 +10,13 @@ import org.springframework.stereotype.Service;
 public class AdminFacadeService {
 
     private final AdminMenuService adminMenuService;
-    private final AdminOrderService adminOrderService;
     private final AdminSettingsService adminSettingsService;
 
     public AdminFacadeService(
         AdminMenuService adminMenuService,
-        AdminOrderService adminOrderService,
         AdminSettingsService adminSettingsService
     ) {
         this.adminMenuService = adminMenuService;
-        this.adminOrderService = adminOrderService;
         this.adminSettingsService = adminSettingsService;
     }
 
@@ -52,7 +48,8 @@ public class AdminFacadeService {
         String description,
         boolean isAvailable,
         int sortOrder,
-        List<Long> mealPeriodIds
+        List<String> tags,
+        boolean soldOut
     ) {
         return adminMenuService.createDish(
             categoryId,
@@ -62,7 +59,8 @@ public class AdminFacadeService {
             description,
             isAvailable,
             sortOrder,
-            mealPeriodIds
+            tags,
+            soldOut
         );
     }
 
@@ -75,7 +73,8 @@ public class AdminFacadeService {
         String description,
         boolean isAvailable,
         int sortOrder,
-        List<Long> mealPeriodIds
+        List<String> tags,
+        boolean soldOut
     ) {
         return adminMenuService.updateDish(
             id,
@@ -86,20 +85,13 @@ public class AdminFacadeService {
             description,
             isAvailable,
             sortOrder,
-            mealPeriodIds
+            tags,
+            soldOut
         );
     }
 
     public Map<String, Object> deleteDish(long id) {
         return adminMenuService.deleteDish(id);
-    }
-
-    public Map<String, Object> listOrders(String from, String to, String period, int page, int limit) {
-        return adminOrderService.listOrders(from, to, period, page, limit);
-    }
-
-    public Map<String, Object> getOrder(long id) {
-        return adminOrderService.getOrder(id);
     }
 
     public Map<String, Object> getSettings() {
@@ -114,12 +106,7 @@ public class AdminFacadeService {
         String publicSiteTitle,
         String publicBrandTitle,
         String publicBrandSubtitle,
-        String publicDomainWhitelist,
-        Boolean notifyEnabled,
-        String notifyChannel,
-        String notifyWebhookUrl,
-        Boolean notifyOrderNowEnabled,
-        Boolean notifyOrderReservationEnabled
+        String publicDomainWhitelist
     ) {
         return adminSettingsService.updateSettings(
             accessMode,
@@ -129,12 +116,7 @@ public class AdminFacadeService {
             publicSiteTitle,
             publicBrandTitle,
             publicBrandSubtitle,
-            publicDomainWhitelist,
-            notifyEnabled,
-            notifyChannel,
-            notifyWebhookUrl,
-            notifyOrderNowEnabled,
-            notifyOrderReservationEnabled
+            publicDomainWhitelist
         );
     }
 }

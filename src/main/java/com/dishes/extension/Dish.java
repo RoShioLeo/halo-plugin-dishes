@@ -44,11 +44,14 @@ public class Dish extends AbstractExtension {
         @Schema(defaultValue = "true")
         private Boolean isAvailable;
 
+        @Schema(description = "Temporarily sold out while remaining listed", defaultValue = "false")
+        private Boolean soldOut;
+
         @Schema(defaultValue = "0")
         private Integer sortOrder;
 
-        @Schema(description = "Meal period ids", defaultValue = "[]")
-        private List<Long> mealPeriodIds;
+        @Schema(description = "LemonSlice free-form tags (up to 16)")
+        private List<String> tags;
     }
 }
 

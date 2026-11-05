@@ -1,965 +1,731 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-
-import { apiGet, apiPost, getApiErrorMessage } from '@/api/http'
+import KitchenIcon from '@/components/KitchenIcon.vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
+import { ApiError, apiGet, apiPost, getApiErrorMessage } from '@/api/http'
+import { countSharedDishes, defaultPeriod, isDate, isPeriod, kitchenViewer, loadViewer, mealContext, mealPeriods, normalizeCustomItems, normalizeDish, periodName, quantityLabel, shanghaiToday, withinPublicCartLimit } from '@/api/kitchen'
+import type { Dish, Participant, PeriodCode, SharedOrder } from '@/api/kitchen'
 import { resolveMediaUrl } from '@/utils/mediaUrl'
 import { stars } from '@/utils/recommendationDisplay'
-import { getPublicBrandSubtitle, getPublicBrandTitle } from '@/utils/publicBranding'
-import OrderSchedulingPromptModal from '@/components/OrderSchedulingPromptModal.vue'
-import OrderSubmitNotesModal from '@/components/OrderSubmitNotesModal.vue'
-import headerLogoUrl from '@/assets/lemon.svg'
+import KitchenBrand from '@/components/KitchenBrand.vue'
+import KitchenFooter from '@/components/KitchenFooter.vue'
+import SharedParticipant from '@/components/SharedParticipant.vue'
+import KitchenModal from '@/components/KitchenModal.vue'
+import KitchenSupplementEditor from '@/components/KitchenSupplementEditor.vue'
+import { createAutosave, createWriteSerial } from '@/utils/autosave'
+import { ContextDraftStore, createRequestTracker, draftContent, draftKey, mealTagNames, isCurrentBatch, canEditSubmitted, updateSavedQuantity, freezeSubmissionPayload, catalogueIncludesDish, canIncreaseCatalogueDish, stockOrdered, isPublicQuantity } from '@/utils/kitchenDraft'
+import type { KitchenDraft } from '@/utils/kitchenDraft'
 
-const PERIODS = [
-  { code: 'breakfast' as const, label: '早餐' },
-  { code: 'lunch' as const, label: '午餐' },
-  { code: 'dinner' as const, label: '晚餐' },
-]
-
-type PeriodCode = (typeof PERIODS)[number]['code']
-
-interface DishRow {
-  id: number
-  category_id: number
-  category_name: string
-  name: string
-  image_url: string | null
-  recommendation_level: number
-  description: string | null
-  is_available: number | boolean
-  sort_order: number
-  meal_period_ids: number[]
-}
-
-/** 后端 `DishesStore.Dish` record 经 Jackson 为 camelCase；此处统一为前台使用的 snake 字段 */
-function normalizeDishRow(raw: unknown): DishRow {
-  const o = raw as Record<string, unknown>
-  const num = (v: unknown, fallback = 0) => {
-    if (typeof v === 'number' && !Number.isNaN(v)) return v
-    if (typeof v === 'string' && v.trim() !== '') {
-      const n = Number(v)
-      return Number.isNaN(n) ? fallback : n
-    }
-    return fallback
-  }
-  const idsRaw = o.meal_period_ids ?? o.mealPeriodIds
-  const meal_period_ids = Array.isArray(idsRaw)
-    ? idsRaw.map((x) => num(x, NaN)).filter((x) => !Number.isNaN(x))
-    : []
-  return {
-    id: num(o.id),
-    category_id: num(o.category_id ?? o.categoryId),
-    category_name: String(o.category_name ?? o.categoryName ?? ''),
-    name: String(o.name ?? ''),
-    image_url: (o.image_url ?? o.imageUrl ?? null) as string | null,
-    recommendation_level: num(o.recommendation_level ?? o.recommendationLevel, 3),
-    description: (o.description ?? null) as string | null,
-    is_available: (o.is_available ?? o.isAvailable ?? true) as number | boolean,
-    sort_order: num(o.sort_order ?? o.sortOrder, 0),
-    meal_period_ids,
-  }
-}
-
-interface DishLite {
-  id: number
-  name: string
-  image_url: string | null
-  category_id: number
-  category_name: string
-}
-
-interface TodayPeriodRow {
-  meal_period: { id: number; code: string; name: string; sort_order: number }
-  order: {
-    id: number
-    remark: string | null
-    items: Array<{
-      dish_id: number
-      quantity: number
-      note: string | null
-      dish: {
-        name: string
-        image_url: string | null
-        category_id: number
-        category_name: string
-      }
-    }>
-    item_count: number
-    created_at: string
-    updated_at: string
-  } | null
-}
-
-interface TodayData {
-  date: string
-  periods: TodayPeriodRow[]
-}
-
-type SelMap = Record<number, { dish: DishLite; qty: number; note?: string | null }>
-
+type Draft = KitchenDraft
+const draftStore = new ContextDraftStore(() => window.sessionStorage)
+const requests = createRequestTracker()
 const route = useRoute()
 const router = useRouter()
-
-const menuScrollEl = ref<HTMLElement | null>(null)
-
-function resolveHeaderAvatarUrlRaw() {
-  const fallback = headerLogoUrl
-  try {
-    const customLogo = (window as unknown as { __DISHES_PUBLIC_LOGO__?: string }).__DISHES_PUBLIC_LOGO__
-    const v = (customLogo ?? '').trim()
-    return v || String(fallback)
-  } catch {
-    return String(fallback)
-  }
-}
-
-const headerAvatarUrl = computed(() => resolveMediaUrl(resolveHeaderAvatarUrlRaw()))
-
-const publicBrandTitle = computed(() => getPublicBrandTitle())
-const publicBrandSubtitle = computed(() => getPublicBrandSubtitle())
-
+const date = ref(shanghaiToday())
+const period = ref<PeriodCode>(defaultPeriod())
+const dishes = ref<Dish[]>([])
+const tags = ref<string[]>([])
+const shared = ref<SharedOrder | null>(null)
+const draftBatchId = ref('')
+const batchChanged = ref(false)
+const draft = reactive<Draft>({ revision: 0, items: [], offMenu: '', remark: '', nickname: '' })
+const baseline = ref('')
+const initialized = ref(false)
 const loading = ref(true)
-const loadError = ref<string | null>(null)
-const submitting = ref(false)
-const submitTip = ref<string | null>(null)
-
-const submitModalOpen = ref(false)
-const submitModalOutcome = ref<'idle' | 'success' | 'error'>('idle')
-const submitModalError = ref<string | null>(null)
-
-/** 是否已完成「今日 / 预约」选择并允许加载点菜页 */
-const schedulingReady = ref(false)
-/** 用户是否从预约入口进入（用于顶栏提示；时间戳对齐另由 shouldAlignOrderTimestamps 决定） */
-const isSchedulingMode = ref(false)
-/** 当前订单归属日期 YYYY-MM-DD（今日点餐 = 当天；预约 = 所选日） */
-const orderingDate = ref('')
-
-function localTodayYmd(): string {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-const shouldAlignOrderTimestamps = computed(() => {
-  if (!isSchedulingMode.value) return false
-  const d = orderingDate.value
-  if (!d) return false
-  return d > localTodayYmd()
+const saving = ref(false)
+const syncing = ref(false)
+const loadError = ref('')
+const saveError = ref('')
+const conflict = ref(false)
+const sharedStale = ref(false)
+const search = ref('')
+const selectedTags = ref<string[]>([])
+const sharedPanel = ref<HTMLElement | null>(null)
+const catalogueListScroll = ref<HTMLElement | null>(null)
+const categoryByContext = reactive<Record<string, string>>({})
+const activeCategory = computed({
+  get: () => categoryByContext[`${date.value}:${period.value}`] || '',
+  set: (value: string) => { categoryByContext[`${date.value}:${period.value}`] = value },
 })
-
-function formatOrderingDayLabel(ymd: string): string {
-  const parts = ymd.split('-')
-  const mo = parts[1]
-  const day = parts[2]
-  if (!mo || !day) return ymd
-  return `${parseInt(mo, 10)}月${parseInt(day, 10)}日`
+const closeSharedButton = ref<HTMLButtonElement | null>(null)
+const sharedOpen = ref(false)
+const wideScreenQuery = window.matchMedia('(min-width: 960px)')
+const wideScreen = ref(wideScreenQuery.matches)
+const desktopSupplementEditor = ref<InstanceType<typeof KitchenSupplementEditor> | null>(null)
+const drawerSupplementEditor = ref<InstanceType<typeof KitchenSupplementEditor> | null>(null)
+let drawerReturnFocus: HTMLElement | null = null
+let appInertBeforeDrawer: boolean | undefined
+let alive = true
+let refreshTimer: ReturnType<typeof setInterval> | undefined
+let activeKey = ''
+let shareMessageTimer: ReturnType<typeof setTimeout> | undefined
+const shareMessage = ref('')
+const drawerError = ref('')
+const drawerNotice = ref('')
+const drawerWriteFailed = ref(false)
+const guestNickname = ref(readNickname())
+const actorName = computed(() => kitchenViewer.value?.authenticated ? kitchenViewer.value.displayName : guestNickname.value.trim())
+const validActor = computed(() => !!actorName.value && actorName.value.length <= 32)
+const nicknameOpen = ref(false)
+const nicknameInput = ref('')
+const nicknameError = ref('')
+let identityPromise: Promise<boolean> | null = null
+let identityResolve: ((accepted: boolean) => void) | null = null
+let nicknameFromDrawer = false
+const confirmOpen = ref(false)
+const preparingSubmission = ref(false)
+const locking = ref(false)
+const busyInteraction = computed(() => preparingSubmission.value || locking.value)
+const writes = createWriteSerial()
+const autosave = createAutosave(saveActiveDraft, 300)
+let hydrating = false
+interface SubmissionReview {
+  payload: { date: string; period: PeriodCode; nickname: string; batchId: string; draftContributionVersions: Record<string, number> }
+  participants: { displayName: string; items: { name: string; quantity: number }[]; offMenu: string; remark: string }[]
+  fromDrawer: boolean
 }
+const submissionReview = ref<SubmissionReview | null>(null)
+function applyDraftState(action: () => void) { hydrating = true; try { action() } finally { hydrating = false } }
 
-function onSchedulingResolved(payload: { isScheduled: boolean; orderDate: string }) {
-  isSchedulingMode.value = payload.isScheduled
-  orderingDate.value = payload.orderDate
-  schedulingReady.value = true
-  void bootstrap()
+function clone<T>(value: T): T { return JSON.parse(JSON.stringify(value)) as T }
+function content(value: Draft): string {
+  return draftContent(value, true)
 }
-
-const dishes = ref<DishRow[]>([])
-const periodIdByCode = ref<Record<string, number>>({})
-const activeCode = ref<PeriodCode>('lunch')
-const activeCategoryId = ref<number | null>(null)
-
-const selections = reactive<Record<PeriodCode, SelMap>>({
-  breakfast: {},
-  lunch: {},
-  dinner: {},
-})
-
-function toLite(d: DishRow): DishLite {
-  return {
-    id: d.id,
-    name: d.name,
-    image_url: d.image_url,
-    category_id: d.category_id,
-    category_name: d.category_name,
+const dirty = computed(() => !!baseline.value && (content(draft) !== baseline.value || ownRenameNeeded.value))
+const canEdit = computed(() => !!kitchenViewer.value && date.value >= kitchenViewer.value.today && date.value <= kitchenViewer.value.maxDate)
+const canEditDraft = computed(() => canEdit.value && !batchChanged.value)
+const filterTags = computed(() => tags.value.filter((tag) => !mealTagNames.includes(tag)))
+function canIncreaseDish(dish: Dish) { return canIncreaseCatalogueDish(dish, periodName(period.value)) }
+const catalogueDishes = computed(() => {
+  const selectedIds = new Set(draft.items.map((item) => item.dishId))
+  const listedIds = new Set(dishes.value.map((dish) => dish.id))
+  const list = dishes.value.filter((dish) => catalogueIncludesDish(dish, selectedIds, periodName(period.value)))
+  for (const item of draft.items) {
+    if (listedIds.has(item.dishId)) continue
+    list.push({ id: item.dishId, name: item.name, imageUrl: item.imageUrl, categoryId: 0, categoryName: '已点菜品', recommendationLevel: 0, description: '', isAvailable: false, soldOut: false, tags: [...item.tags] })
   }
-}
-
-function parsePeriodQuery(q: unknown): PeriodCode {
-  if (q === 'breakfast' || q === 'lunch' || q === 'dinner') return q
-  return 'lunch'
-}
-
-const currentPid = computed(() => periodIdByCode.value[activeCode.value] ?? null)
-
-/** 餐段 Tab 滑动高亮用（0–2） */
-const periodActiveIndex = computed(() => {
-  const i = PERIODS.findIndex((p) => p.code === activeCode.value)
-  return i >= 0 ? i : 0
+  return stockOrdered(list)
 })
-
-/** 餐段角标用，避免模板里反复 Object.keys */
-const periodSelectionCounts = computed(() => ({
-  breakfast: Object.keys(selections.breakfast).length,
-  lunch: Object.keys(selections.lunch).length,
-  dinner: Object.keys(selections.dinner).length,
+const visibleDishes = computed(() => catalogueDishes.value.filter((dish) => {
+  // A refresh must not hide an already selected dish that can now only be reduced.
+  if (!canIncreaseDish(dish) && draft.items.some((item) => item.dishId === dish.id)) return true
+  const term = search.value.trim().toLocaleLowerCase()
+  return (!term || `${dish.name} ${dish.description} ${dish.tags.join(' ')}`.toLocaleLowerCase().includes(term))
+    && selectedTags.value.every((tag) => dish.tags.includes(tag))
 }))
-
-const categories = computed(() => {
-  const pid = currentPid.value
-  if (!pid) return [] as { id: number; name: string }[]
-  const map = new Map<number, string>()
-  for (const d of dishes.value) {
-    if (!d.meal_period_ids.includes(pid)) continue
-    if (!isAvailable(d)) continue
-    map.set(d.category_id, d.category_name)
+const catalogueGroups = computed(() => {
+  const groups = new Map<string, { key: string; name: string; dishes: Dish[] }>()
+  for (const dish of visibleDishes.value) {
+    const name = dish.categoryName || '其他菜品'
+    const key = `${dish.categoryId}:${name}`
+    if (!groups.has(key)) groups.set(key, { key, name, dishes: [] })
+    groups.get(key)!.dishes.push(dish)
   }
-  return [...map.entries()]
-    .map(([id, name]) => ({ id, name }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+  return [...groups.values()]
 })
-
-const visibleDishes = computed(() => {
-  const pid = currentPid.value
-  if (!pid) return []
-  return dishes.value.filter((d) => {
-    if (!d.meal_period_ids.includes(pid)) return false
-    if (!isAvailable(d)) return false
-    if (activeCategoryId.value !== null && d.category_id !== activeCategoryId.value) return false
-    return true
+const categoryDishes = computed(() => activeCategory.value ? catalogueGroups.value.find((group) => group.key === activeCategory.value)?.dishes ?? [] : visibleDishes.value)
+const categoryTitle = computed(() => catalogueGroups.value.find((group) => group.key === activeCategory.value)?.name || '全部菜品')
+function chooseCategory(key: string) {
+  activeCategory.value = key
+  catalogueListScroll.value?.scrollTo({ top: 0, behavior: 'auto' })
+}
+watch(catalogueGroups, (groups) => { if (activeCategory.value && !groups.some((group) => group.key === activeCategory.value)) activeCategory.value = '' })
+const activeParticipants = computed(() => shared.value?.participants.filter((person) => !person.submitted && person.batchId === shared.value?.activeBatchId) ?? [])
+const ownRenameNeeded = computed(() => !kitchenViewer.value?.authenticated && validActor.value && activeParticipants.value.some((person) => person.mine) && actorName.value !== shared.value?.mine.nickname)
+const displayedActiveParticipants = computed(() => activeParticipants.value.map((person) => person.mine && !batchChanged.value && withinPublicCartLimit(person) ? { ...person, items: draft.items, offMenu: draft.offMenu, remark: draft.remark } : person))
+const sharedDishCount = computed(() => countSharedDishes(shared.value))
+const currentOrderTotals = computed(() => {
+  const items = new Map<string, { key: string; name: string; quantity: number }>()
+  const add = (key: string, name: string, quantity: number) => {
+    const current = items.get(key)
+    if (current) current.quantity += quantity
+    else items.set(key, { key, name, quantity })
+  }
+  const selections = displayedActiveParticipants.value.map((person) => person.items)
+  if (!batchChanged.value && !activeParticipants.value.some((person) => person.mine)) selections.push(draft.items)
+  for (const selection of selections) {
+    for (const item of selection) {
+      add(`dish:${item.dishId}`, item.name, item.quantity)
+    }
+  }
+  for (const person of displayedActiveParticipants.value) {
+    for (const item of normalizeCustomItems(person.customItems)) add(`custom:${item.customId}`, item.name, item.quantity)
+  }
+  return [...items.values()]
+})
+const submittedGroups = computed(() => (shared.value?.submittedBatches ?? []).map((batch, index) => ({ ...batch, number: index + 1, participants: shared.value?.participants.filter((person) => person.submitted && person.batchId === batch.id) ?? [] })).filter((batch) => batch.participants.length > 0))
+const canPrepareSubmission = computed(() => canEdit.value && !loading.value && !busyInteraction.value && !conflict.value && !batchChanged.value && (activeParticipants.value.length > 0 || dirty.value))
+const draftValid = computed(() => draft.items.length <= 50 && draft.items.every((item) => isPublicQuantity(item.quantity) && item.quantity > 0))
+function readNickname(): string { try { return localStorage.getItem('lemonslice-kitchen-nickname') ?? '' } catch { return '' } }
+function persistDraft() {
+  if (!activeKey || !initialized.value || !baseline.value) return
+  draftStore.save(activeKey, draft, baseline.value, dirty.value)
+}
+function editorName(order: SharedOrder): string {
+  return actorName.value || order.mine.nickname || readNickname()
+}
+function serverDraft(order: SharedOrder): Draft {
+  const source = order.mine
+  return { revision: source.revision, items: clone(source.items), offMenu: source.offMenu, remark: source.remark, nickname: editorName(order) }
+}
+function restoreOwnDraft(order: SharedOrder) {
+  const source = serverDraft(order)
+  if (!kitchenViewer.value?.authenticated && !guestNickname.value && order.mine.nickname) guestNickname.value = order.mine.nickname
+  draftBatchId.value = order.activeBatchId
+  batchChanged.value = false
+  activeKey = draftKey(date.value, period.value, order.activeBatchId)
+  const stored = draftStore.load(activeKey)
+  applyDraftState(() => {
+    Object.assign(draft, stored?.draft || source, { nickname: editorName(order) })
+    baseline.value = stored?.baseline || content(source)
   })
-})
-
-/** 仅随「分类」变化，避免切换顶部餐段时整表 remount + out-in 造成整页闪动 */
-const dishPanelCategoryKey = computed(
-  () => String(activeCategoryId.value ?? 'all'),
-)
-
-const rightHeading = computed(() => {
-  if (activeCategoryId.value === null) return '全部菜品'
-  const c = categories.value.find((x) => x.id === activeCategoryId.value)
-  return c?.name ?? '菜品'
-})
-
-const currentLines = computed(() => {
-  const m = selections[activeCode.value]
-  return Object.entries(m)
-    .map(([id, v]) => ({ id: Number(id), ...v }))
-    .sort((a, b) => a.dish.name.localeCompare(b.dish.name, 'zh-CN'))
-})
-
-const totalQty = computed(() =>
-  currentLines.value.reduce((s, l) => s + l.qty, 0),
-)
-
-function isAvailable(d: DishRow) {
-  const v = d.is_available
-  return v === true || v === 1 || String(v) === '1'
+  conflict.value = !!stored && stored.draft.revision !== source.revision
+  saveError.value = ''
 }
-
-function setActiveCode(code: PeriodCode) {
-  activeCode.value = code
-  activeCategoryId.value = null
-  void router.replace({ query: { ...route.query, period: code } })
+function rebaseDraft() {
+  if (!shared.value || batchChanged.value) return
+  const saved = serverDraft(shared.value)
+    draft.revision = saved.revision
+  baseline.value = content(saved)
+  conflict.value = false
+  saveError.value = ''
+  persistDraft()
+  void scheduleAutosave()
 }
-
-function toggleDish(d: DishRow) {
-  const code = activeCode.value
-  const cur = selections[code]
-  if (cur[d.id]) {
-    delete cur[d.id]
-  } else {
-    cur[d.id] = { dish: toLite(d), qty: 1 }
-  }
+function normalizeContext() {
+  const viewer = kitchenViewer.value
+  const requestedDate = isDate(route.query.date) ? route.query.date : viewer?.today || shanghaiToday()
+  return { date: requestedDate, period: isPeriod(route.query.period) ? route.query.period : defaultPeriod() }
 }
-
-function isSelected(id: number) {
-  return Boolean(selections[activeCode.value][id])
-}
-
-function incLine(id: number) {
-  const line = selections[activeCode.value][id]
-  if (!line) return
-  line.qty = Math.min(99, Math.round((line.qty + 1) * 10) / 10)
-}
-
-function decLine(id: number) {
-  const cur = selections[activeCode.value]
-  const line = cur[id]
-  if (!line) return
-  if (line.qty <= 1) {
-    delete cur[id]
-  } else {
-    line.qty = Math.max(1, Math.round((line.qty - 1) * 10) / 10)
-  }
-}
-
-async function bootstrap() {
+async function loadContext() {
+  closeShared(false)
+  autosave.cancelPending()
+  const next = normalizeContext()
+  persistDraft()
+  date.value = next.date
+  period.value = next.period
+  mealContext.value = next
   loading.value = true
-  loadError.value = null
-  submitTip.value = null
+  loadError.value = ''
+  saveError.value = ''
+  conflict.value = false
+  shared.value = null
+  const current = requests.begin()
   try {
-    const dateQ = encodeURIComponent(orderingDate.value || localTodayYmd())
-    const [today, dishRes] = await Promise.all([
-      apiGet<TodayData>(`/meal-orders/today?date=${dateQ}`),
-      apiGet<{ items: unknown[] }>('/dishes'),
-    ])
-    dishes.value = (dishRes.items ?? []).map(normalizeDishRow)
-    const map: Record<string, number> = {}
-    for (const row of today.periods) {
-      map[row.meal_period.code] = row.meal_period.id
-    }
-    periodIdByCode.value = map
-    hydrateFromToday(today, dishes.value)
+    const order = await apiGet<SharedOrder>(`/order?date=${encodeURIComponent(next.date)}&period=${next.period}`)
+    if (!alive || !requests.isCurrent(current)) return
+    // Bind the draft only after this meal has loaded successfully.
+    shared.value = order
+    sharedStale.value = false
+    restoreOwnDraft(order)
+    initialized.value = true
+    persistDraft()
   } catch (e) {
-    loadError.value = getApiErrorMessage(e, '加载失败', {
-      DISHES_ACCESS_DENIED: '需要先完成访问验证',
-    })
+    if (alive && requests.isCurrent(current)) loadError.value = getApiErrorMessage(e, '这一餐暂时无法加载，请重试')
   } finally {
-    loading.value = false
-  }
-}
-
-function hydrateFromToday(today: TodayData, list: DishRow[]) {
-  const byId = new Map(list.map((d) => [d.id, d]))
-  const codes: PeriodCode[] = ['breakfast', 'lunch', 'dinner']
-  for (const row of today.periods) {
-    const code = row.meal_period.code as PeriodCode
-    if (!codes.includes(code)) continue
-    const next: SelMap = {}
-    const o = row.order
-    if (o?.items?.length) {
-      for (const it of o.items) {
-        const full = byId.get(it.dish_id)
-        const dish: DishLite = full
-          ? toLite(full)
-          : {
-              id: it.dish_id,
-              name: it.dish.name,
-              image_url: it.dish.image_url,
-              category_id: it.dish.category_id,
-              category_name: it.dish.category_name,
-            }
-        next[it.dish_id] = {
-          dish,
-          qty: Number(it.quantity),
-          note: it.note != null && String(it.note).trim() !== '' ? String(it.note) : undefined,
-        }
-      }
+    if (alive && requests.isCurrent(current)) {
+      loading.value = false
+      if (dirty.value && validActor.value && !conflict.value && !batchChanged.value) autosave.schedule()
     }
-    selections[code] = next
   }
 }
-
-function trimNoteForApi(s: string | undefined): string | null {
-  const t = (s ?? '').trim()
-  if (t === '') return null
-  return t.slice(0, 255)
-}
-
-const submitModalPeriodLabel = computed(
-  () => PERIODS.find((p) => p.code === activeCode.value)?.label ?? '',
-)
-
-const submitModalInitialNotes = computed(() => {
-  const m = selections[activeCode.value]
-  const o: Record<number, string> = {}
-  for (const l of currentLines.value) {
-    const n = m[l.id]?.note
-    o[l.id] = n != null && String(n).trim() !== '' ? String(n) : ''
-  }
-  return o
-})
-
-function openSubmitModal() {
-  if (!currentLines.value.length) {
-    submitTip.value = '请先选择至少一道菜'
+function acceptShared(order: SharedOrder) {
+  const rotated = !isCurrentBatch(draftBatchId.value, order.activeBatchId)
+  const hadPendingEdits = dirty.value
+  if (rotated) persistDraft()
+  shared.value = order
+  if (rotated) {
+    if (hadPendingEdits) {
+      batchChanged.value = true
+    } else {
+      restoreOwnDraft(order)
+    }
     return
   }
-  submitTip.value = null
-  submitModalError.value = null
-  submitModalOutcome.value = 'idle'
-  submitModalOpen.value = true
+  const saved = serverDraft(order)
+  if (!dirty.value) { applyDraftState(() => { Object.assign(draft, saved); baseline.value = content(draft) }) }
+  else if (saved.revision !== draft.revision) conflict.value = true
 }
-
-async function onSubmitNotesConfirmed(notes: Record<number, string>) {
-  submitting.value = true
-  submitModalError.value = null
-  submitTip.value = null
+function startAddition() {
+  if (!shared.value || saving.value) return
+  persistDraft()
+  autosave.cancelPending()
+  requests.begin()
+  restoreOwnDraft(shared.value)
+}
+function supplementsAreBeingEdited(person: Participant): boolean {
+  return !wideScreen.value && person.mine && !person.submitted
+}
+function participantEditable(person: Participant) {
+  return canEdit.value && withinPublicCartLimit(person) && canEditSubmitted(person.submitted)
+}
+function batchTime(value: string): string {
+  const instant = new Date(value)
+  return Number.isNaN(instant.getTime()) ? '' : new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(instant)
+}
+function applyCatalogue(catalogue: { items: unknown[]; tags: string[] }) {
+  dishes.value = catalogue.items.map(normalizeDish)
+  tags.value = [...new Set([...(catalogue.tags ?? []), ...dishes.value.flatMap((dish) => dish.tags)])]
+}
+async function refreshShared(manual = false) {
+  if (!initialized.value || !shared.value || loadError.value || loading.value || saving.value || syncing.value || preparingSubmission.value || confirmOpen.value || nicknameOpen.value || document.hidden) return
+  const current = requests.current()
+  syncing.value = true
   try {
-    const lines = currentLines.value
-    await apiPost<unknown>('/meal-orders', {
-      order_date: orderingDate.value || localTodayYmd(),
-      meal_period_code: activeCode.value,
-      remark: null,
-      set_timestamps_to_order_date: shouldAlignOrderTimestamps.value,
-      items: lines.map((l) => ({
-        dish_id: l.dish.id,
-        quantity: l.qty,
-        note: trimNoteForApi(notes[l.id]),
-      })),
-    })
-    for (const l of lines) {
-      const row = selections[activeCode.value][l.id]
-      if (row) {
-        const n = trimNoteForApi(notes[l.id])
-        row.note = n ?? undefined
-      }
+    const [orderResult, catalogueResult] = await Promise.allSettled([
+      apiGet<SharedOrder>(`/order?date=${encodeURIComponent(date.value)}&period=${period.value}`),
+      apiGet<{ items: unknown[]; tags: string[] }>('/dishes'),
+    ])
+    if (!alive || !requests.isCurrent(current)) return
+    if (catalogueResult.status === 'fulfilled') applyCatalogue(catalogueResult.value)
+    sharedStale.value = orderResult.status === 'rejected' || catalogueResult.status === 'rejected'
+    if (orderResult.status === 'fulfilled') {
+      acceptShared(orderResult.value)
+      if (manual) { drawerWriteFailed.value = false; drawerError.value = ''; drawerNotice.value = '' }
     }
-    submitModalOutcome.value = 'success'
+  } finally { if (alive) syncing.value = false }
+}
+async function bootstrap() {
+  loading.value = true
+  loadError.value = ''
+  try {
+    const [, catalogue] = await Promise.all([loadViewer(), apiGet<{ items: unknown[]; tags: string[] }>('/dishes')])
+    if (!alive) return
+    applyCatalogue(catalogue)
+    await loadContext()
+    if (!route.query.date || !isPeriod(route.query.period)) void router.replace({ path: '/order', query: { date: date.value, period: period.value } })
   } catch (e) {
-    submitModalOutcome.value = 'error'
-    submitModalError.value = getApiErrorMessage(e, '提交失败', {
-      DISHES_ACCESS_DENIED: '访问授权已失效，请重新验证后提交',
-      DISHES_INVALID_MEAL_PERIOD_CODE: '餐段无效，请切换餐段后重试',
-      DISHES_BAD_REQUEST: '提交内容不合法，请检查后重试',
-    })
-  } finally {
-    submitting.value = false
+    if (alive) { loadError.value = getApiErrorMessage(e, '菜谱暂时无法加载'); loading.value = false }
   }
 }
-
-function onSubmitModalAfterSuccess() {
-  submitModalOpen.value = false
-  submitModalOutcome.value = 'idle'
-  void router.push('/')
+async function changeContext(field: 'date' | 'period', event: Event) {
+  const element = event.target as HTMLInputElement
+  const value = element.value
+  element.value = field === 'date' ? date.value : period.value
+  if (field === 'date' && !isDate(value)) return
+  if (field === 'period' && !isPeriod(value)) return
+  if (!batchChanged.value && !await flushPending()) return
+  persistDraft()
+  void router.replace({ path: '/order', query: { date: date.value, period: period.value, [field]: value } })
 }
-
-onMounted(() => {
-  activeCode.value = parsePeriodQuery(route.query.period)
+function toggleTag(tag: string) {
+  selectedTags.value = [tag]
+}
+function selected(id: number) { return draft.items.find((item) => item.dishId === id) }
+function applyDishQuantity(dish: Dish, quantity: number) {
+  if (!canEditDraft.value || busyInteraction.value) return
+  const index = draft.items.findIndex((item) => item.dishId === dish.id)
+  const previous = index >= 0 ? draft.items[index]!.quantity : 0
+  if (!canIncreaseDish(dish) && quantity > previous) { saveError.value = dish.soldOut ? '这道菜已售罄，只能减量或移除。' : dish.isAvailable ? '这道菜不适用于当前餐次，只能减量或移除。' : '这道菜已下架，只能减量或移除。'; return }
+  if (quantity === 0) { if (index >= 0) draft.items.splice(index, 1); return }
+  if (!isPublicQuantity(quantity) || quantity < 1) return
+  if (index >= 0) draft.items[index]!.quantity = quantity
+  else if (draft.items.length < 50) {
+    draft.items.push({ dishId: dish.id, name: dish.name, imageUrl: dish.imageUrl, quantity, note: '', tags: [...dish.tags] })
+  } else saveError.value = '每次最多选择 50 道菜。'
+}
+function adjustDish(dish: Dish, delta: number) {
+  const quantity = Number(selected(dish.id)?.quantity ?? 0)
+  applyDishQuantity(dish, Math.max(0, Math.min(99, quantity + delta)))
+}
+function inputDishQuantity(dish: Dish, event: Event) {
+  const input = event.target as HTMLInputElement
+  const previous = selected(dish.id)?.quantity ?? 0
+  if (input.value.trim() === '') { input.value = quantityLabel(previous); saveError.value = '份数不能为空；输入 0 或点击减号可移除。'; return }
+  const quantity = Number(input.value)
+  if (!isPublicQuantity(quantity)) {
+    input.value = quantityLabel(previous)
+    saveError.value = '份数须为 0 至 99 的整数，0 表示移除。'
+    return
+  }
+  applyDishQuantity(dish, quantity)
+  input.value = quantityLabel(selected(dish.id)?.quantity ?? 0)
+}
+async function ensureIdentity(force = false): Promise<boolean> {
+  if (kitchenViewer.value?.authenticated) return true
+  if (validActor.value && !force) return true
+  if (identityPromise) return identityPromise
+  nicknameFromDrawer = sharedOpen.value
+  closeShared(false)
+  nicknameInput.value = guestNickname.value
+  nicknameError.value = ''
+  nicknameOpen.value = true
+  identityPromise = new Promise<boolean>((resolve) => { identityResolve = resolve })
+  return identityPromise
+}
+function completeNickname() {
+  const value = nicknameInput.value.trim()
+  if (!value || value.length > 32) { nicknameError.value = '昵称需要 1 至 32 个字符。'; return }
+  guestNickname.value = value
+  try { localStorage.setItem('lemonslice-kitchen-nickname', value) } catch { /* Page preference still works. */ }
+  const resolve = identityResolve
+  identityResolve = null
+  identityPromise = null
+  nicknameOpen.value = false
+  void nextTick(() => {
+    if (nicknameFromDrawer) openShared()
+    resolve?.(true)
+    if (dirty.value && canEditDraft.value && !conflict.value) autosave.schedule()
+  })
+}
+function cancelNickname() {
+  const resolve = identityResolve
+  identityResolve = null
+  identityPromise = null
+  nicknameOpen.value = false
+  void nextTick(() => { if (nicknameFromDrawer) openShared(); resolve?.(false) })
+}
+async function scheduleAutosave() {
+  if (!initialized.value || hydrating || loading.value || !dirty.value || !canEditDraft.value || conflict.value) return
+  if (!await ensureIdentity()) { saveError.value = '设置点餐昵称后才能同步，当前选择仍保留。'; return }
+  autosave.schedule()
+}
+async function flushPending(): Promise<boolean> {
+  if (batchChanged.value) { persistDraft(); return false }
+  if (!dirty.value) { await writes.idle(); return true }
+  if (!await ensureIdentity()) return false
+  autosave.schedule()
+  try { await autosave.flush(); await writes.idle(); return !dirty.value && !conflict.value && !batchChanged.value } catch { return false }
+}
+async function saveActiveDraft(): Promise<void> {
+  await writes.run(async () => {
+    if (!dirty.value) return
+    if (!canEditDraft.value || !draftValid.value || conflict.value || !shared.value || !validActor.value) throw new Error('当前点菜暂时不能同步')
+    saving.value = true
+    saveError.value = ''
+    const current = requests.begin()
+    const submittedKey = activeKey
+    const snapshot = clone(draft)
+    const fingerprint = content(snapshot)
+    const payload = { date: date.value, period: period.value, nickname: actorName.value, revision: snapshot.revision, batchId: draftBatchId.value, items: snapshot.items.map((item) => ({ dishId: item.dishId, quantity: Number(item.quantity), note: item.note })), offMenu: snapshot.offMenu, remark: snapshot.remark }
+    try {
+      await loadViewer(true)
+      const response = await apiPost<{ order: SharedOrder }>('/cart', payload)
+      draftStore.clear(submittedKey)
+      if (!alive || !requests.isCurrent(current)) return
+      shared.value = response.order
+      const saved = serverDraft(response.order)
+      applyDraftState(() => {
+        if (content(draft) === fingerprint) Object.assign(draft, saved)
+        else draft.revision = saved.revision
+        baseline.value = content(saved)
+      })
+      conflict.value = false
+      sharedStale.value = false
+      persistDraft()
+    } catch (e) {
+      if (alive && requests.isCurrent(current)) {
+        saveError.value = getApiErrorMessage(e, '同步失败，当前修改仍保留，请重试。')
+        if (e instanceof ApiError && e.status === 409) {
+          conflict.value = true
+          try { acceptShared(await apiGet<SharedOrder>(`/order?date=${encodeURIComponent(payload.date)}&period=${payload.period}`)) } catch { /* Preserve local fields. */ }
+          saveError.value = '这份点菜有新的变化，请核对后继续同步；不会自动覆盖或追加到新批次。'
+        }
+      }
+      throw e
+    } finally { if (alive) saving.value = false }
+  })
+}
+async function prepareSubmission(fromDrawer = false) {
+  if (!canPrepareSubmission.value) return
+  if (!await ensureIdentity()) return
+  if (drawerWriteFailed.value) { saveError.value = '还有份数调整未成功，请重试该调整，或刷新并核对服务器内容后再提交。'; return }
+  preparingSubmission.value = true
+  saveError.value = ''
+  try {
+    if (!await flushPending()) return
+    const order = await apiGet<SharedOrder>(`/order?date=${encodeURIComponent(date.value)}&period=${period.value}`)
+    acceptShared(order)
+    if (batchChanged.value || conflict.value || dirty.value || !activeParticipants.value.length) { saveError.value = '请核对当前待提交内容，再提交点餐。'; return }
+    submissionReview.value = {
+      payload: freezeSubmissionPayload({ date: date.value, period: period.value, nickname: actorName.value, batchId: order.activeBatchId, draftContributionVersions: clone(order.draftContributionVersions) }),
+      participants: activeParticipants.value.map((person) => ({ displayName: person.displayName, items: person.items.map((item) => ({ name: item.name, quantity: item.quantity })), offMenu: person.offMenu, remark: person.remark })),
+      fromDrawer,
+    }
+    closeShared(false)
+    confirmOpen.value = true
+  } catch (e) { saveError.value = getApiErrorMessage(e, '无法准备提交，请刷新后重试。') }
+  finally { preparingSubmission.value = false }
+}
+function cancelSubmission() {
+  if (locking.value) return
+  const fromDrawer = submissionReview.value?.fromDrawer
+  confirmOpen.value = false
+  submissionReview.value = null
+  if (fromDrawer) void nextTick(() => { openShared() })
+}
+async function confirmSubmission() {
+  const review = submissionReview.value
+  if (!review || locking.value) return
+  locking.value = true
+  const current = requests.begin()
+  const submittedKey = activeKey
+  try {
+    const result = await writes.run(() => apiPost<{ order: SharedOrder }>('/submit', clone(review.payload)))
+    draftStore.clear(submittedKey)
+    if (!alive || !requests.isCurrent(current)) return
+    shared.value = result.order
+    activeKey = ''
+    restoreOwnDraft(result.order)
+    autosave.cancelPending()
+    saveError.value = ''
+    conflict.value = false
+    confirmOpen.value = false
+    submissionReview.value = null
+    if (review.fromDrawer) void nextTick(() => { openShared() })
+  } catch (e) {
+    if (!alive || !requests.isCurrent(current)) return
+    saveError.value = getApiErrorMessage(e, '提交失败，请重新核对共享单。')
+    if (e instanceof ApiError && e.status === 409) {
+      try { acceptShared(await apiGet<SharedOrder>(`/order?date=${encodeURIComponent(review.payload.date)}&period=${review.payload.period}`)) } catch { /* Review is still invalidated. */ }
+      saveError.value = '共享单已有变化，请重新核对并确认提交；本次没有锁单。'
+    }
+    confirmOpen.value = false
+    submissionReview.value = null
+    if (review.fromDrawer) void nextTick(() => { openShared() })
+  } finally { if (alive) locking.value = false }
+}
+function canIncreaseSharedDish(dishId: number): boolean {
+  const dish = dishes.value.find((entry) => entry.id === dishId)
+  return !!dish && canIncreaseDish(dish)
+}
+async function saveParticipantQuantity(person: Participant, dishId: number, quantity: number) {
+  if (!shared.value || saving.value || busyInteraction.value || !participantEditable(person) || !isPublicQuantity(quantity)) return
+  drawerError.value = ''
+  drawerNotice.value = ''
+  if (!await ensureIdentity()) { drawerError.value = '设置昵称后才能调整，服务器数量没有改变。'; return }
+  const originalItem = person.items.find((item) => item.dishId === dishId)
+  if (!originalItem || (quantity > originalItem.quantity && !canIncreaseSharedDish(dishId))) return
+  if (person.mine && !batchChanged.value) {
+    const updated = updateSavedQuantity(clone(draft), dishId, quantity)
+    Object.assign(draft, updated)
+    if (await flushPending()) drawerNotice.value = ''
+    else drawerError.value = saveError.value || '同步失败，修改仍保留。'
+    return
+  }
+  const source: Draft = { revision: person.revision, items: clone(person.items), offMenu: person.offMenu || '', remark: person.remark || '', nickname: actorName.value }
+  const updated = updateSavedQuantity(source, dishId, quantity)
+  const payload = { date: date.value, period: period.value, batchId: shared.value.activeBatchId, targetParticipantId: person.id, revision: person.revision, nickname: actorName.value, items: updated.items.map((item) => ({ dishId: item.dishId, quantity: item.quantity, note: item.note })), offMenu: person.offMenu || '', remark: person.remark || '' }
+  const hadOwnPendingEdits = dirty.value
+  await writes.run(async () => {
+      const current = requests.begin()
+      saving.value = true
+      try {
+        const result = await apiPost<{ order: SharedOrder }>('/cart', payload)
+        if (!alive || !requests.isCurrent(current)) return
+        acceptShared(result.order)
+        drawerWriteFailed.value = false
+        drawerNotice.value = hadOwnPendingEdits && conflict.value ? '主表单存在冲突，请核对后继续。' : ''
+      } catch (e) {
+        if (alive && requests.isCurrent(current)) {
+          drawerWriteFailed.value = true
+          drawerError.value = getApiErrorMessage(e, '份数未同步，仍显示服务器原值，请重试。')
+          if (e instanceof ApiError && e.status === 409) {
+            try { acceptShared(await apiGet<SharedOrder>(`/order?date=${encodeURIComponent(payload.date)}&period=${payload.period}`)) } catch { /* Keep saved values. */ }
+            drawerError.value = '这份点菜已有新版本，请核对后再调整。'
+          }
+        }
+      } finally { if (alive) saving.value = false }
+  })
+}
+async function shareMeal() {
+  const target = router.resolve({ path: '/order', query: { date: date.value, period: period.value } })
+  const url = new URL(target.href, window.location.origin).href
+  try {
+    await navigator.clipboard.writeText(url)
+    shareMessage.value = '这一餐的链接已复制'
+  } catch {
+    shareMessage.value = '可复制地址栏链接，邀请大家一起点菜。'
+  }
+  clearTimeout(shareMessageTimer)
+  shareMessageTimer = setTimeout(() => { shareMessage.value = '' }, 4000)
+}
+function openShared() {
+  if (sharedOpen.value) return
+  if (!drawerWriteFailed.value) drawerError.value = ''
+  drawerNotice.value = ''
+  drawerReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  const app = document.getElementById('app')
+  if (app) { appInertBeforeDrawer = app.inert; app.inert = true }
+  sharedOpen.value = true
+  void nextTick(() => { closeSharedButton.value?.focus() })
+}
+function closeShared(restoreFocus = true) {
+  sharedOpen.value = false
+  const app = document.getElementById('app')
+  if (app && appInertBeforeDrawer !== undefined) app.inert = appInertBeforeDrawer
+  appInertBeforeDrawer = undefined
+  if (restoreFocus && drawerReturnFocus?.isConnected) {
+    const target = drawerReturnFocus
+    void nextTick(() => { if (target.isConnected) target.focus({ preventScroll: true }) })
+  }
+}
+function onDrawerKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeShared(); return }
+  if (event.key !== 'Tab' || !sharedPanel.value) return
+  const controls = [...sharedPanel.value.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter((element) => element.getClientRects().length > 0)
+  const first = controls[0]
+  const last = controls[controls.length - 1]
+  if (!first || !last) { event.preventDefault(); sharedPanel.value.focus(); return }
+  if (event.shiftKey && (document.activeElement === first || !sharedPanel.value.contains(document.activeElement))) { event.preventDefault(); last.focus() }
+  else if (!event.shiftKey && (document.activeElement === last || !sharedPanel.value.contains(document.activeElement))) { event.preventDefault(); first.focus() }
+}
+watch(draft, persistDraft, { deep: true })
+watch(() => content(draft), () => { if (!hydrating) void scheduleAutosave() }, { flush: 'sync' })
+onBeforeRouteUpdate(async (to) => {
+  if (to.query.date === route.query.date && to.query.period === route.query.period) return true
+  const targetDate = isDate(to.query.date) ? to.query.date : kitchenViewer.value?.today || shanghaiToday()
+  const targetPeriod = isPeriod(to.query.period) ? to.query.period : defaultPeriod()
+  if (targetDate === date.value && targetPeriod === period.value) return true
+  return batchChanged.value ? (persistDraft(), true) : await flushPending()
 })
-
-watch(
-  () => route.query.period,
-  (p) => {
-    activeCode.value = parsePeriodQuery(p)
-    activeCategoryId.value = null
-  },
-)
-
-watch(activeCode, () => {
-  const el = menuScrollEl.value
-  if (el) el.scrollTop = 0
+onBeforeRouteLeave(async () => batchChanged.value ? (persistDraft(), true) : await flushPending())
+watch(() => [route.query.date, route.query.period], () => {
+  if (!initialized.value) return
+  const next = normalizeContext()
+  if (shared.value && shared.value.date === next.date && shared.value.period === next.period) return
+  void loadContext()
 })
+function scheduleRefresh() {
+  clearInterval(refreshTimer)
+  refreshTimer = undefined
+  if (!document.hidden && alive) refreshTimer = setInterval(() => { void refreshShared() }, 10_000)
+}
+function onVisible() {
+  scheduleRefresh()
+  if (!document.hidden) void refreshShared()
+}
+function onViewportChange(event: MediaQueryListEvent) {
+  const focused = document.activeElement
+  const field = focused instanceof HTMLTextAreaElement ? focused.dataset.kSupplementField : undefined
+  const selection = focused instanceof HTMLTextAreaElement ? [focused.selectionStart, focused.selectionEnd] as const : undefined
+  wideScreen.value = event.matches
+  if (!field) return
+  // Move the active editor with its text selection; the draft and save queue stay in this view.
+  if (event.matches) closeShared(false)
+  else openShared()
+  void nextTick(() => {
+    const input = (event.matches ? desktopSupplementEditor.value : drawerSupplementEditor.value)?.field(field)
+    if (!input || input.disabled) return
+    input.focus({ preventScroll: true })
+    if (selection) input.setSelectionRange(selection[0], selection[1])
+  })
+}
+onMounted(() => { void bootstrap(); scheduleRefresh(); window.addEventListener('focus', onVisible); document.addEventListener('visibilitychange', onVisible); wideScreenQuery.addEventListener('change', onViewportChange) })
+onUnmounted(() => { persistDraft(); autosave.dispose(); identityResolve?.(false); closeShared(false); alive = false; requests.begin(); clearInterval(refreshTimer); clearTimeout(shareMessageTimer); window.removeEventListener('focus', onVisible); document.removeEventListener('visibilitychange', onVisible); wideScreenQuery.removeEventListener('change', onViewportChange) })
 </script>
 
 <template>
-  <!-- 底栏不可放在带 transform 的 Transition 内，否则 fixed 会相对动画层定位，结束瞬间会「跳」到视口底 -->
-  <div class="order-page flex min-h-0 min-w-0 flex-1 flex-col">
-    <OrderSchedulingPromptModal
-      v-if="!schedulingReady"
-      @resolved="onSchedulingResolved"
-    />
+  <div class="k-page-scroll">
+    <KitchenBrand />
+    <div class="k-page-content k-order-content">
+      <section class="k-page-heading k-order-heading">
+        <div><p class="k-eyebrow">WHAT'S ON THE MENU</p><h2>看看吃啥</h2><p class="k-order-subtitle">让我看看，有什么好吃的？</p></div>
+        <button type="button" class="k-share-action" @click="shareMeal"><KitchenIcon name="share-line" />分享</button>
+      </section>
+      <p v-if="shareMessage" class="k-hint k-share-feedback" role="status">{{ shareMessage }}</p>
+      <div class="k-context-bar">
+        <label class="k-context-field"><span>用餐日期</span><input type="date" :value="date" :min="kitchenViewer?.today" :max="kitchenViewer?.maxDate" :disabled="busyInteraction || loading" @change="changeContext('date', $event)" /></label>
+        <label class="k-context-field"><span>餐次</span><select :value="period" :disabled="busyInteraction || loading" @change="changeContext('period', $event)"><option v-for="meal in mealPeriods" :key="meal.code" :value="meal.code">{{ meal.name }}</option></select></label>
+        <div class="k-actor-line"><span>点餐人：</span><span v-if="kitchenViewer?.authenticated">{{ actorName }}</span><button v-else type="button" class="k-text-link" :disabled="busyInteraction" @click="ensureIdentity(true)">{{ actorName || '设置昵称' }}<KitchenIcon name="edit-line" /></button></div>
+      </div>
+      <div v-if="loading" class="k-empty" role="status">正在准备这一餐…</div>
+      <div v-else-if="loadError" class="k-notice k-notice--error" role="alert"><p>{{ loadError }}</p><button class="k-button k-button--secondary" @click="bootstrap">重新加载</button></div>
+      <template v-else-if="shared">
+        <p v-if="!canEdit" class="k-notice">这个日期只能查看。请选择今天至 {{ kitchenViewer?.maxDate }} 之间的日期来点菜。</p>
+        <div class="k-workspace">
+          <section class="k-catalogue" aria-labelledby="catalogue-title" tabindex="-1">
+            <div class="k-section-heading"><h3 id="catalogue-title">菜谱</h3></div>
+            <div class="k-catalogue-tools">
+              <label class="k-search"><KitchenIcon name="search-line" /><span class="sr-only">搜索菜名、描述或标签</span><input v-model="search" type="search" placeholder="搜索想吃的菜…" /></label>
 
-    <template v-if="schedulingReady">
-    <Transition name="order-mount" appear>
-      <div
-        class="order-shell -mx-4 flex min-h-0 min-w-0 flex-1 flex-col gap-0 overflow-hidden bg-slate-50"
-      >
-      <header
-        class="sticky top-0 z-20 shrink-0 bg-slate-50 supports-[backdrop-filter]:backdrop-blur-sm"
-      >
-        <div class="ls-brand">
-          <img
-            :src="headerAvatarUrl"
-            alt=""
-            width="40"
-            height="40"
-            decoding="async"
-            class="ls-brand__logo"
-          />
-
-          <div class="min-w-0 flex-1">
-            <p class="ls-brand__kicker">LEMONSLICE CLOUD</p>
-            <h1>
-              {{ publicBrandTitle }}
-            </h1>
-            <p class="ls-brand__subtitle">
-              {{ publicBrandSubtitle }}
-            </p>
-          </div>
-        </div>
-
-        <!-- 餐段：留白分段 + 滑动白底高亮 -->
-        <div
-          class="order-header border-b border-slate-200/90 bg-white px-4 pb-3.5 pt-4"
-        >
-          <p
-            class="mb-2 text-xs font-medium tracking-wide"
-            :class="
-              isSchedulingMode && orderingDate
-                ? 'text-blue-700'
-                : 'text-slate-400'
-            "
-          >
-            <template v-if="isSchedulingMode && orderingDate">
-              预约点餐 · {{ formatOrderingDayLabel(orderingDate) }}
-            </template>
-            <template v-else>
-              选择餐段
-            </template>
-          </p>
-          <div
-            class="period-seg relative rounded-xl bg-slate-100/95 p-1"
-            role="tablist"
-            aria-label="餐段"
-            :style="{ '--period-i': periodActiveIndex }"
-          >
-            <div
-              class="period-seg-glider pointer-events-none absolute rounded-lg bg-white shadow-[0_1px_2px_rgba(15,23,42,0.05)] ring-1 ring-slate-200/70"
-              aria-hidden="true"
-            />
-            <div class="relative z-[1] flex gap-2">
-              <button
-                v-for="p in PERIODS"
-                :key="p.code"
-                type="button"
-                role="tab"
-                :aria-selected="activeCode === p.code"
-                class="period-seg-btn relative min-h-[2.25rem] flex-1 rounded-lg py-2 text-sm font-medium transition-[color,transform] duration-300 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] motion-safe:active:scale-[0.98]"
-                :class="
-                  activeCode === p.code
-                    ? 'text-blue-700'
-                    : 'text-slate-500 motion-safe:hover:text-slate-700'
-                "
-                @click="setActiveCode(p.code)"
-              >
-                <span class="relative z-[1]">{{ p.label }}</span>
-                <span
-                  v-if="periodSelectionCounts[p.code]"
-                  class="absolute right-1 top-1 z-[2] flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[9px] font-semibold leading-none text-white ring-2 ring-white"
-                >
-                  {{ periodSelectionCounts[p.code] }}
-                </span>
-              </button>
             </div>
-          </div>
-        </div>
-      </header>
-
-      <!-- 加载 -->
-      <div
-        v-if="loading"
-        class="flex min-h-0 flex-1 gap-0 overflow-hidden"
-      >
-        <div
-          class="order-cat-rail order-cat-rail--scroll flex min-h-0 w-[5.5rem] shrink-0 flex-col gap-2 overflow-y-auto overflow-x-hidden overscroll-y-contain border-r border-slate-200 bg-white py-4 pl-2 pr-1"
-        >
-          <div
-            v-for="n in 5"
-            :key="n"
-            class="h-9 animate-pulse rounded-md bg-slate-100"
-          />
-        </div>
-        <div
-          class="order-menu-scroll order-menu-scroll--above-dock min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto overscroll-y-contain bg-white px-4 py-4 [-webkit-overflow-scrolling:touch]"
-        >
-          <div class="h-3.5 w-20 animate-pulse rounded bg-slate-100" />
-          <div
-            v-for="n in 6"
-            :key="n"
-            class="flex gap-4 rounded-lg border border-slate-100 bg-white p-2 shadow-sm"
-          >
-            <div class="h-14 w-14 shrink-0 animate-pulse rounded-md bg-slate-100 ring-1 ring-slate-200/50 shadow-[0_1px_4px_rgba(15,23,42,0.05)]" />
-            <div class="min-w-0 flex-1 space-y-2 py-1">
-              <div class="h-3.5 w-3/4 animate-pulse rounded bg-slate-100" />
-              <div class="h-3 w-1/2 animate-pulse rounded bg-slate-100" />
+            <div v-if="filterTags.length" class="k-tags" role="group" aria-label="按标签筛选，单选">
+              <button type="button" class="k-tag" :aria-pressed="!selectedTags.length" @click="selectedTags = []">全部</button>
+              <button v-for="tag in filterTags" :key="tag" type="button" class="k-tag" :aria-pressed="selectedTags.includes(tag)" @click="toggleTag(tag)">{{ tag }}</button>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 错误 -->
-      <div
-        v-else-if="loadError"
-        class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-hidden px-6 py-16 text-center"
-      >
-        <p class="text-sm text-slate-600">
-          {{ loadError }}
-        </p>
-        <button
-          type="button"
-          class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-          @click="bootstrap"
-        >
-          重新加载
-        </button>
-      </div>
-
-      <!-- 分类 + 菜品 -->
-      <div
-        v-else
-        class="flex min-h-0 flex-1 gap-0 overflow-hidden"
-      >
-        <nav
-          class="order-cat-rail order-cat-rail--scroll flex min-h-0 w-[5.5rem] shrink-0 flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain border-r border-slate-200 bg-white py-2 pl-2 pr-0"
-          aria-label="菜品分类"
-        >
-          <button
-            type="button"
-            class="order-cat-item mb-px w-full rounded-md px-2 py-2 text-left text-[12px] leading-snug text-slate-600 transition-colors duration-150"
-            :class="
-              activeCategoryId === null
-                ? 'order-cat-item--active bg-blue-50/80 font-medium text-blue-800'
-                : 'hover:bg-slate-50'
-            "
-            @click="activeCategoryId = null"
-          >
-            全部
-          </button>
-          <button
-            v-for="c in categories"
-            :key="c.id"
-            type="button"
-            class="order-cat-item mb-px w-full rounded-md px-2 py-2 text-left text-[12px] leading-snug text-slate-600 transition-colors duration-150"
-            :class="
-              activeCategoryId === c.id
-                ? 'order-cat-item--active bg-blue-50/80 font-medium text-blue-800'
-                : 'hover:bg-slate-50'
-            "
-            @click="activeCategoryId = c.id"
-          >
-            <span class="line-clamp-3 break-words">{{ c.name }}</span>
-          </button>
-        </nav>
-
-        <section
-          class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white"
-        >
-          <div
-            class="flex shrink-0 items-center justify-between border-b border-slate-100 bg-white px-4 py-2"
-          >
-            <h2 class="text-sm font-medium text-slate-900">
-              {{ rightHeading }}
-            </h2>
-            <span class="text-xs tabular-nums text-slate-400">
-              {{ visibleDishes.length }} 道
-            </span>
-          </div>
-
-          <div
-            ref="menuScrollEl"
-            class="order-menu-scroll order-menu-scroll--above-dock min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-2 [-webkit-overflow-scrolling:touch]"
-          >
-            <Transition name="dish-panel" mode="out-in">
-              <ul
-                :key="dishPanelCategoryKey"
-                class="space-y-2 pb-1"
-              >
-                <li
-                  v-if="!visibleDishes.length"
-                  key="empty"
-                  class="py-20 text-center text-sm text-slate-400"
-                >
-                  当前餐段暂无菜品
-                </li>
-                <li
-                  v-for="d in visibleDishes"
-                  :key="d.id"
-                >
-                  <button
-                    type="button"
-                    class="order-dish-row flex w-full gap-4 rounded-lg border p-2 text-left shadow-sm transition-[border-color,background-color,box-shadow] duration-150"
-                    :class="
-                      isSelected(d.id)
-                        ? 'border-blue-200/90 bg-blue-50/40 shadow-[0_2px_10px_rgba(59,130,246,0.12)]'
-                        : 'border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50/80 hover:shadow-md'
-                    "
-                    @click="toggleDish(d)"
-                  >
-                    <div
-                      class="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200/60 shadow-sm transition-[box-shadow,ring-color] duration-150"
-                      :class="
-                        isSelected(d.id)
-                          ? 'ring-blue-200/70 shadow-[0_2px_8px_rgba(59,130,246,0.18)]'
-                          : ''
-                      "
-                    >
-                      <img
-                        v-if="d.image_url"
-                        :src="resolveMediaUrl(d.image_url)"
-                        :alt="d.name"
-                        class="h-full w-full object-cover"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                      <span
-                        v-else
-                        class="flex h-full items-center justify-center text-xs font-medium text-slate-300"
-                        aria-hidden="true"
-                      >
-                        无图
-                      </span>
-                      <span
-                        v-if="isSelected(d.id)"
-                        class="absolute bottom-0.5 right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-[0_2px_6px_rgba(37,99,235,0.45)] ring-[1.5px] ring-white"
-                        aria-hidden="true"
-                      >
-                        <svg
-                          class="h-2.5 w-2.5 shrink-0 translate-y-[0.5px]"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
-                          aria-hidden="true"
-                        >
-                          <path
-                            d="M20 6L9 17l-5-5"
-                            stroke="currentColor"
-                            stroke-width="2.75"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                          />
-                        </svg>
-                      </span>
-                    </div>
-                    <div
-                      class="flex min-w-0 flex-1 flex-col py-1"
-                      :class="isSelected(d.id) ? 'min-h-[3.5rem]' : ''"
-                    >
-                      <div class="flex items-start justify-between gap-2">
-                        <p class="truncate text-[15px] font-medium text-slate-900">
-                          {{ d.name }}
-                        </p>
-                        <p
-                          class="shrink-0 text-[11px] leading-none tracking-tight text-amber-500"
-                          :aria-label="`推荐 ${d.recommendation_level} 级`"
-                        >
-                          {{ stars(d.recommendation_level) }}
-                        </p>
-                      </div>
-                      <p class="mt-1 truncate text-xs text-slate-500">
-                        {{ d.category_name }}
-                      </p>
-                      <div
-                        v-if="isSelected(d.id)"
-                        class="mt-auto flex justify-end pt-1"
-                      >
-                        <span
-                          class="shrink-0 rounded px-2 py-1 text-[10px] font-medium text-blue-700"
-                          @click.stop
-                        >
-                          已选
-                        </span>
-                      </div>
-                    </div>
-                  </button>
-                </li>
-              </ul>
-            </Transition>
-          </div>
-        </section>
-      </div>
-      </div>
-    </Transition>
-
-    <!-- 底栏：固定叠在底部，可盖住列表；pointer-events 让空白处滑动/点击穿透到列表 -->
-    <div
-      class="order-submit-dock pointer-events-none fixed bottom-0 left-1/2 z-[38] w-full max-w-md -translate-x-1/2 overflow-hidden rounded-t-2xl border border-b-0 border-slate-200/90 bg-white px-4 pt-4 shadow-[0_-4px_24px_rgba(15,23,42,0.08)] pb-[max(0.65rem,env(safe-area-inset-bottom,0px))]"
-    >
-        <p
-          v-if="submitTip"
-          class="pointer-events-auto mb-2 text-center text-xs text-red-600"
-        >
-          {{ submitTip }}
-        </p>
-        <div class="pointer-events-auto mb-4 flex max-h-[5.5rem] flex-col gap-2 overflow-hidden">
-          <p class="text-xs text-slate-500">
-            已选 <span class="font-medium text-slate-700">{{ totalQty }}</span> 份
-          </p>
-          <div
-            v-if="currentLines.length"
-            class="flex gap-2 overflow-x-auto overflow-y-hidden pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          >
-            <div
-              v-for="line in currentLines"
-              :key="line.id"
-              class="flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 py-1 pl-2 pr-1 text-[11px] text-slate-800"
-            >
-              <span class="max-w-[6.5rem] truncate">{{ line.dish.name }}</span>
-              <div class="flex items-center rounded-full border border-slate-200 bg-white">
-                <button
-                  type="button"
-                  class="flex h-7 w-7 items-center justify-center text-slate-600 transition-colors hover:bg-slate-50"
-                  aria-label="减少"
-                  @click="decLine(line.id)"
-                >
-                  −
-                </button>
-                <span class="min-w-[1.25rem] text-center text-[11px] font-medium tabular-nums text-slate-700">
-                  {{ line.qty }}
-                </span>
-                <button
-                  type="button"
-                  class="flex h-7 w-7 items-center justify-center text-slate-600 transition-colors hover:bg-slate-50"
-                  aria-label="增加"
-                  @click="incLine(line.id)"
-                >
-                  +
-                </button>
+            <div class="k-category-menu">
+              <nav class="k-category-rail" aria-label="菜品分类，单选">
+                <button type="button" :class="!activeCategory ? 'is-active' : ''" :aria-pressed="!activeCategory" @click="chooseCategory('')"><span>全部</span></button>
+                <button v-for="group in catalogueGroups" :key="group.key" type="button" :class="activeCategory === group.key ? 'is-active' : ''" :aria-pressed="activeCategory === group.key" @click="chooseCategory(group.key)"><span>{{ group.name }}</span></button>
+              </nav>
+              <div ref="catalogueListScroll" class="k-category-dishes">
+                <div class="k-category-dishes__heading"><span>{{ categoryTitle }}</span><small>{{ categoryDishes.length }} 道</small></div>
+                <p v-if="!catalogueDishes.length" class="k-empty k-empty--small">暂无菜品</p>
+                <p v-else-if="!categoryDishes.length" class="k-empty k-empty--small">没有找到符合条件的菜品。<button class="k-text-link" @click="search = ''; selectedTags = []; chooseCategory('')">清除筛选</button></p>
+                <ul class="k-catalogue-list">
+              <li v-for="dish in categoryDishes" :key="dish.id">
+                <div class="k-catalogue-dish" :class="selected(dish.id) ? 'is-selected' : ''">
+                  <img v-if="dish.imageUrl" :src="resolveMediaUrl(dish.imageUrl)" :alt="dish.name" loading="lazy" width="80" height="80" />
+                  <span v-else class="k-dish-placeholder" aria-hidden="true">食</span>
+                  <div class="k-grow"><span class="k-dish-name" :title="dish.name">{{ dish.name }}</span><span v-if="dish.recommendationLevel > 0" class="k-stars" :aria-label="`推荐等级 ${dish.recommendationLevel} 星`">{{ stars(dish.recommendationLevel) }}</span><span v-if="!dish.soldOut && !canIncreaseDish(dish)" class="k-dish-unavailable">{{ dish.isAvailable ? '当前餐次不可新增，仅可减量或移除' : '已下架，仅可减量或移除' }}</span><span v-if="dish.description" class="k-dish-description" :title="dish.description">{{ dish.description }}</span><span v-if="dish.tags.some((tag) => !mealTagNames.includes(tag))" class="k-dish-tags" :title="dish.tags.filter((tag) => !mealTagNames.includes(tag)).join(' · ')">{{ dish.tags.filter((tag) => !mealTagNames.includes(tag)).join(' · ') }}</span></div>
+                  <div class="k-catalogue-stepper" role="group" :aria-label="`${dish.name} 份数`">
+                    <button v-if="selected(dish.id)" type="button" :disabled="!canEditDraft || busyInteraction" :aria-label="`减少 ${dish.name} 份数，减到 0 移除`" @click="adjustDish(dish, -1)"><KitchenIcon name="subtract-line" /></button>
+                    <input v-if="selected(dish.id)" type="number" min="0" :max="canIncreaseDish(dish) ? 99 : selected(dish.id)?.quantity ?? 0" step="1" :value="quantityLabel(selected(dish.id)?.quantity ?? 0)" :disabled="!canEditDraft || busyInteraction" :aria-label="`${dish.name} 份数，0 表示移除`" @change="inputDishQuantity(dish, $event)" />
+                    <span v-if="dish.soldOut" class="k-stock-state">售罄</span><button v-else type="button" :disabled="!canEditDraft || busyInteraction || !canIncreaseDish(dish) || (selected(dish.id)?.quantity ?? 0) >= 99" :aria-label="`增加 ${dish.name} 份数`" @click="adjustDish(dish, 1)"><KitchenIcon name="add-line" /></button>
+                  </div>
+                </div>
+              </li>
+                </ul>
               </div>
             </div>
-          </div>
-          <p
-            v-else
-            class="text-xs text-slate-400"
-          >
-            点击菜品即可加入
-          </p>
-        </div>
-        <div class="pointer-events-auto flex gap-2">
-          <button
-            type="button"
-            class="flex h-12 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
-            aria-label="返回首页"
-            @click="router.push('/')"
-          >
-            <svg
-              class="h-[18px] w-[18px] shrink-0 text-slate-500"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              <polyline points="9 22 9 12 15 12 15 22" />
-            </svg>
-            <span class="max-[360px]:sr-only">首页</span>
-          </button>
-          <button
-            type="button"
-            class="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
-            :disabled="submitting || !currentLines.length"
-            @click="openSubmitModal"
-          >
-            提交点餐
-          </button>
-        </div>
-    </div>
+          </section>
+          <section class="k-own-panel" aria-label="当前点餐">
+            <div v-if="wideScreen || batchChanged || saveError || conflict" class="k-own-body">
+              <section v-if="wideScreen && currentOrderTotals.length" class="k-current-summary" aria-label="当前点餐"><h3>当前点餐</h3><ul><li v-for="item in currentOrderTotals" :key="item.key"><span :title="item.name">{{ item.name }}</span><span>× {{ quantityLabel(item.quantity) }}</span></li></ul></section>
+              <KitchenSupplementEditor v-if="wideScreen" ref="desktopSupplementEditor" v-model:off-menu="draft.offMenu" v-model:remark="draft.remark" :disabled="busyInteraction || !canEditDraft" @blur="flushPending()" />
+              <div v-if="batchChanged" class="k-notice k-notice--warning"><p>这个批次已提交，不能再修改。旧批次本地修改不会自动带入加点。</p><button type="button" class="k-text-link" :disabled="saving" @click="startAddition">开始新的待提交加点</button></div>
+              <div v-if="saveError" class="k-notice k-notice--error" role="alert"><p>{{ saveError }}</p><button v-if="!conflict && !batchChanged" type="button" class="k-text-link" @click="flushPending()">重试同步</button></div>
+              <div v-if="conflict && !batchChanged" class="k-notice k-notice--warning"><p>这份点菜已有新版本，本地修改已保留。</p><button type="button" class="k-text-link" @click="rebaseDraft">核对后，按最新版本同步这些修改</button></div>
+            </div>
+            <footer class="k-own-footer">
+              <button type="button" class="k-button k-button--primary k-save-button k-wide-submit" :disabled="!canPrepareSubmission" @click="prepareSubmission(false)"><KitchenIcon name="send-plane-line" />提交点餐</button>
+              <button type="button" class="k-button k-button--primary k-save-button k-mobile-submit" :disabled="busyInteraction" @click="openShared">去提交 <KitchenIcon name="arrow-right-s-line" /></button>
+            </footer>
+          </section>
 
-    <OrderSubmitNotesModal
-      v-model="submitModalOpen"
-      :lines="currentLines"
-      :meal-period-label="submitModalPeriodLabel"
-      :loading="submitting"
-      :outcome="submitModalOutcome"
-      :error-message="submitModalError"
-      :initial-notes="submitModalInitialNotes"
-      @confirm="onSubmitNotesConfirmed"
-      @after-success="onSubmitModalAfterSuccess"
-    />
-    </template>
+        </div>
+        <button type="button" class="k-shared-fab" :aria-label="`查看点餐单，共 ${sharedDishCount} 道菜`" :aria-expanded="sharedOpen" aria-controls="k-shared-drawer" title="查看点餐单" @click="openShared">
+          <KitchenIcon name="group-line" :size="24" />
+          <span class="k-shared-fab__count" aria-hidden="true">{{ sharedDishCount > 99 ? '99+' : sharedDishCount }}</span>
+        </button>
+        <Teleport to="body">
+          <Transition name="k-shared-drawer">
+            <div v-if="sharedOpen" class="k-drawer-root">
+              <button type="button" class="k-drawer-backdrop" aria-label="点击遮罩关闭" tabindex="-1" @click="closeShared()" />
+          <section id="k-shared-drawer" ref="sharedPanel" class="k-shared-panel k-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="shared-title" tabindex="-1" @keydown="onDrawerKeydown">
+            <div class="k-section-heading"><h3 id="shared-title">点餐单</h3><div class="k-shared-actions"><button type="button" class="k-icon-button" :disabled="syncing || saving || busyInteraction" :aria-busy="syncing" aria-label="刷新" title="刷新" @click="refreshShared(true)"><KitchenIcon name="refresh-line" /></button><button ref="closeSharedButton" type="button" class="k-icon-button" aria-label="关闭点餐单" title="关闭" @click="closeShared()"><KitchenIcon name="close-line" /></button></div></div>
+            <div class="k-drawer-content">
+              <p v-if="sharedStale" class="k-hint k-pending-hint">菜谱或共享内容暂未更新，你的修改仍保留。</p>
+
+              <p v-if="drawerError" class="k-notice k-notice--error" role="alert">{{ drawerError }}</p>
+              <p v-if="drawerNotice" class="k-save-feedback" role="status">{{ drawerNotice }}</p>
+              <p v-if="!shared.participants.length" class="k-hint k-shared-empty">还没有点餐</p>
+
+              <section v-if="activeParticipants.length" class="k-batch-group k-batch-group--pending"><div class="k-section-heading"><h4>待提交</h4></div><ul class="k-participants"><SharedParticipant v-for="person in displayedActiveParticipants" :key="person.id" :person="person" :editable="participantEditable(person)" :busy="saving || busyInteraction" :can-increase="canIncreaseSharedDish" :hide-supplements="supplementsAreBeingEdited(person)" @quantity="saveParticipantQuantity" @invalid="drawerError = $event" /></ul></section>
+              <KitchenSupplementEditor v-if="!wideScreen" ref="drawerSupplementEditor" v-model:off-menu="draft.offMenu" v-model:remark="draft.remark" :disabled="busyInteraction || !canEditDraft" @blur="flushPending()" />
+              <section v-for="batch in submittedGroups" :key="batch.id" class="k-batch-group k-batch-group--submitted"><div class="k-section-heading"><h4>第 {{ batch.number }} 批</h4><span class="k-hint">{{ batchTime(batch.submittedAt) }}</span></div><ul class="k-participants"><SharedParticipant v-for="person in batch.participants" :key="person.id" :person="person" :editable="participantEditable(person)" :busy="saving || busyInteraction" :can-increase="canIncreaseSharedDish" :hide-supplements="supplementsAreBeingEdited(person)" @quantity="saveParticipantQuantity" @invalid="drawerError = $event" /></ul></section>
+
+
+            </div>
+            <footer v-if="activeParticipants.length || (dirty && !batchChanged)" class="k-drawer-footer"><p v-if="saveError" class="k-notice k-notice--error" role="alert">{{ saveError }}</p><button type="button" class="k-button k-button--primary k-save-button" :disabled="!canPrepareSubmission" @click="prepareSubmission(true)"><KitchenIcon name="send-plane-line" />提交点餐</button></footer>
+          </section>
+            </div>
+          </Transition>
+        </Teleport>
+      </template>
+      <KitchenFooter />
+    </div>
+    <KitchenModal :model-value="nicknameOpen" title="设置点餐昵称" @cancel="cancelNickname">
+      <label class="k-field k-modal-nickname"><span>昵称</span><input v-model="nicknameInput" data-autofocus maxlength="32" autocomplete="nickname" placeholder="1 至 32 个字符" @keyup.enter="completeNickname" /></label>
+      <p v-if="nicknameError" class="k-notice k-notice--error" role="alert">{{ nicknameError }}</p>
+      <template #actions><button type="button" class="k-button k-button--secondary" @click="cancelNickname">取消</button><button type="button" class="k-button k-button--primary" @click="completeNickname">确定</button></template>
+    </KitchenModal>
+    <KitchenModal :model-value="confirmOpen" title="提交点餐单" :busy="locking" @cancel="cancelSubmission">
+      <p class="k-submit-explanation">提交后，本餐所有人的点菜仅主厨可修改。继续点菜将作为加点。</p>
+      <p v-if="submissionReview" class="k-hint">{{ submissionReview.payload.date }} · {{ periodName(submissionReview.payload.period) }} · {{ submissionReview.participants.length }} 份点菜</p>
+      <ul v-if="submissionReview" class="k-submit-review"><li v-for="(person, index) in submissionReview.participants" :key="index"><h4>{{ person.displayName }}</h4><p v-for="(item, itemIndex) in person.items" :key="itemIndex">{{ item.name }} <span>× {{ quantityLabel(item.quantity) }}</span></p><p v-if="person.offMenu">想吃其他菜：{{ person.offMenu }}</p><p v-if="person.remark">本餐备注：{{ person.remark }}</p></li></ul>
+      <template #actions><button type="button" class="k-button k-button--secondary" data-autofocus :disabled="locking" @click="cancelSubmission">取消</button><button type="button" class="k-button k-button--primary" :disabled="locking" @click="confirmSubmission">{{ locking ? '正在提交…' : '确认提交点餐' }}</button></template>
+    </KitchenModal>
   </div>
 </template>
-
-<style scoped>
-.order-shell {
-  min-height: 0;
-}
-
-.order-menu-scroll {
-  touch-action: pan-y;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.order-menu-scroll::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-
-.order-cat-rail--scroll {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.order-cat-rail--scroll::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-
-/* 列表可延伸到固定底栏下方；留白保证最后一道菜能滚上来点击，空白处手势由底栏 pointer-events-none 穿透 */
-.order-menu-scroll--above-dock {
-  padding-bottom: max(10.5rem, calc(9rem + env(safe-area-inset-bottom, 0px)));
-}
-
-/*
- * 餐段 Tab：滑块用 left 定位（100% = 轨道宽度）。
- * 勿用 translateX(calc(...100%...))：在 transform 里 % 相对滑块自身，会导致错位。
- */
-.period-seg {
-  --seg-pad: 0.25rem;
-  --seg-gap: 0.5rem;
-  --period-i: 0;
-}
-
-.period-seg-glider {
-  top: var(--seg-pad);
-  bottom: var(--seg-pad);
-  width: calc((100% - 2 * var(--seg-pad) - 2 * var(--seg-gap)) / 3);
-  left: calc(
-    var(--seg-pad) +
-      var(--period-i) *
-        ((100% - 2 * var(--seg-pad) - 2 * var(--seg-gap)) / 3 + var(--seg-gap))
-  );
-  transition:
-    left 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-    box-shadow 0.25s ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .period-seg-glider {
-    transition-duration: 0.01ms;
-  }
-
-  .period-seg-btn {
-    transition-duration: 0.01ms;
-  }
-}
-
-.order-cat-item--active {
-  box-shadow: inset 2px 0 0 0 var(--ls-accent);
-}
-
-/* 页面进入：轻量上浮 + 淡入 */
-.order-mount-enter-active {
-  transition:
-    opacity 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-    transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-
-.order-mount-enter-from {
-  opacity: 0;
-  transform: translate3d(0, 8px, 0);
-}
-
-/* 分类切换：仅淡入淡出，避免横向位移抢戏 */
-.dish-panel-enter-active,
-.dish-panel-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.dish-panel-enter-from,
-.dish-panel-leave-to {
-  opacity: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .order-mount-enter-active {
-    transition-duration: 0.01ms;
-  }
-
-  .order-mount-enter-from {
-    transform: none;
-  }
-
-  .dish-panel-enter-active,
-  .dish-panel-leave-active {
-    transition-duration: 0.01ms;
-  }
-}
-</style>

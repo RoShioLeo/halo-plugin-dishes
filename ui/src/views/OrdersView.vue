@@ -1,51 +1,93 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { VButton, VCard, VEmpty, VModal, VPageHeader, VPagination } from '@halo-dev/components'
-import { getApiErrorMessage, getData } from '@/api/client'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { Dialog, Toast, VButton, VCard, VPageHeader } from '@halo-dev/components'
+import { getApiErrorMessage, getData, postData } from '@/api/client'
+import { allocateKitchenQuantities, type KitchenQuantitySource } from '@/utils/kitchenAllocation'
 import RiFileList3Line from '~icons/ri/file-list-3-line'
+import RiCloseLine from '~icons/ri/close-line'
+import RiArrowLeftSLine from '~icons/ri/arrow-left-s-line'
+import RiArrowRightSLine from '~icons/ri/arrow-right-s-line'
+import RiRefreshLine from '~icons/ri/refresh-line'
 
 type PeriodCode = 'breakfast' | 'lunch' | 'dinner'
-
-type Order = {
-  id: number
-  orderDate: string
-  mealPeriodCode: PeriodCode
-  mealPeriodName?: string
-  itemCount: number
+type EditMode = 'requests' | 'menu'
+type MenuItem = {
+  dishId: number | null
+  customId?: string | null
+  name: string
+  quantity: number
+  imageUrl: string
+  note: string
 }
-
-type OrdersResp = {
-  range: { from: string; to: string }
-  items: Order[]
-  meta: { total: number; limit: number; offset: number }
+type Selection = MenuItem & { dishId: number }
+type Participant = {
+  id: string
+  displayName: string
+  avatarUrl?: string
+  batchId?: string
+  submitted?: boolean
+  revision: number
+  items: Selection[]
+  customItems?: MenuItem[]
+  offMenu: string
+  remark: string
 }
-
-type OrderDetailResp = {
-  id: number
-  orderDate: string
-  mealPeriod: { id: number; code: string; name: string }
-  order: {
-    id: number
-    remark: string | null
-    items: Array<{
-      line_id: number
-      dish_id: number
-      quantity: number
-      note: string | null
-      dish: { name: string; image_url: string | null; category_id: number; category_name: string }
-    }>
-    item_count: number
-    created_at: string
-    updated_at: string
-  }
-}
-
-type DayCard = {
+type Menu = { status: 'draft' | 'confirmed'; revision: number; items: MenuItem[]; note: string }
+type KitchenPeriod = {
   date: string
-  periodMap: Record<PeriodCode, Order | null>
-  totalCount: number
-  isScheduled: boolean
+  period: PeriodCode
+  periodName: string
+  needsConfirmation: boolean
+  participants: Participant[]
+  menu: Menu
+  workingItems: MenuItem[]
+  contributionVersions: Record<string, number>
+  stateRevision: number
+  activeBatchId: string
+  chefParticipantId: string | null
+  chefDisplayName: string
+  chefAvatarUrl?: string
+  hasDraftChanges?: boolean
+}
+type Dish = {
+  id: number
+  name: string
+  imageUrl?: string | null
+  isAvailable: boolean
+  soldOut?: boolean
+}
+type DraftItem = MenuItem & { key: string }
+type DraftSource = {
+  sourceId: string
+  participantId: string | null
+  displayName: string
+  avatarUrl?: string
+  batchId?: string
+  submitted?: boolean
+  items: DraftItem[]
+  offMenu: string
+  remark: string
+}
+type Editor = {
+  revision: number
+  stateRevision: number
+  batchId: string
+  versions: Record<string, number>
+  chefSourceId: string
+  baseline: KitchenQuantitySource[]
+  sources: DraftSource[]
+  items: DraftItem[]
+  metadata: Record<string, DraftItem>
+  inputs: Record<string, string>
+  inputLimits: Record<string, number>
+  inputErrors: Record<string, string>
+  note: string
+  mode: EditMode | null
+  dirty: boolean
+  saving: boolean
+  error: string
+  catalogueId: string
 }
 
 const PERIODS: Array<{ code: PeriodCode; name: string }> = [
@@ -53,585 +95,1242 @@ const PERIODS: Array<{ code: PeriodCode; name: string }> = [
   { code: 'lunch', name: '午餐' },
   { code: 'dinner', name: '晚餐' },
 ]
-
 const route = useRoute()
 const router = useRouter()
-
 const loading = ref(true)
-const error = ref<string | null>(null)
-const allOrders = ref<Order[]>([])
-const dayCards = ref<DayCard[]>([])
+const refreshing = ref(false)
+const loadError = ref('')
+const catalogue = ref<Dish[]>([])
+const catalogueError = ref('')
+const orders = ref<KitchenPeriod[]>([])
+const editors = reactive<Record<PeriodCode, Editor>>({
+  breakfast: emptyEditor(),
+  lunch: emptyEditor(),
+  dinner: emptyEditor(),
+})
+const selectedDate = ref(normalizeDate(route.query.date) || chinaToday())
+const selectedPeriod = ref(normalizePeriod(route.query.period) || currentPeriod())
+const failedAvatars = reactive(new Set<string>())
+const anyDirty = computed(() => PERIODS.some(({ code }) => editors[code].dirty))
+const anySaving = computed(() => PERIODS.some(({ code }) => editors[code].saving))
+const availableDishes = computed(() => catalogue.value.filter((dish) => dish.isAvailable))
+const selectedOrders = computed(() =>
+  orders.value.filter((order) => order.period === selectedPeriod.value),
+)
+let periodChosen = !!normalizePeriod(route.query.period)
+let requestSerial = 0
+let disposed = false
 
-const queryDate = ref('')
-const page = ref(1)
-const size = ref(10)
-
-const detailOpen = ref(false)
-const detailLoading = ref(false)
-const detailError = ref<string | null>(null)
-const detail = ref<OrderDetailResp | null>(null)
-const detailRequestSeq = ref(0)
-const detailOpening = ref(false)
-
-function ymd(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-function localTodayYmd(): string {
-  return ymd(new Date())
-}
-
-function setFromQuery() {
-  const q = route.query
-  const qDate = typeof q.date === 'string' ? q.date : ''
-  const qPage = typeof q.page === 'string' ? parseInt(q.page, 10) : NaN
-  const qSize = typeof q.size === 'string' ? parseInt(q.size, 10) : NaN
-
-  queryDate.value = qDate || ''
-  if (!Number.isNaN(qPage) && qPage > 0) page.value = qPage
-  if (!Number.isNaN(qSize) && qSize > 0) size.value = qSize
-}
-
-function syncQuery() {
-  const nextQuery: Record<string, string> = {
-    page: String(page.value),
-    size: String(size.value),
+function emptyEditor(): Editor {
+  return {
+    revision: 0,
+    stateRevision: 0,
+    batchId: '',
+    versions: {},
+    chefSourceId: '__chef__',
+    baseline: [],
+    sources: [],
+    items: [],
+    metadata: {},
+    inputs: {},
+    inputLimits: {},
+    inputErrors: {},
+    note: '',
+    mode: null,
+    dirty: false,
+    saving: false,
+    error: '',
+    catalogueId: '',
   }
-  if (queryDate.value) nextQuery.date = queryDate.value
-  void router.replace({
-    query: nextQuery,
-  })
 }
-
-function buildDayCards(rows: Order[]): DayCard[] {
-  const today = localTodayYmd()
-  const map = new Map<string, DayCard>()
-  for (const row of rows) {
-    const key = row.orderDate
-    if (!map.has(key)) {
-      map.set(key, {
-        date: key,
-        periodMap: { breakfast: null, lunch: null, dinner: null },
-        totalCount: 0,
-        isScheduled: key > today,
-      })
+function chinaToday() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  return ['year', 'month', 'day']
+    .map((type) => parts.find((item) => item.type === type)?.value || '')
+    .join('-')
+}
+function currentPeriod(): PeriodCode {
+  const hour = Number(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Shanghai',
+      hour: '2-digit',
+      hourCycle: 'h23',
+    }).format(new Date()),
+  )
+  return hour < 10 ? 'breakfast' : hour < 16 ? 'lunch' : 'dinner'
+}
+function normalizePeriod(value: unknown): PeriodCode | '' {
+  return PERIODS.some((period) => period.code === value) ? (value as PeriodCode) : ''
+}
+function normalizeDate(value: unknown): string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return ''
+  const date = new Date(value + 'T12:00:00Z')
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : ''
+}
+function emptyPeriod(code: PeriodCode, name: string): KitchenPeriod {
+  return {
+    date: selectedDate.value,
+    period: code,
+    periodName: name,
+    needsConfirmation: false,
+    participants: [],
+    contributionVersions: {},
+    stateRevision: 0,
+    activeBatchId: '',
+    workingItems: [],
+    chefParticipantId: null,
+    chefDisplayName: '主厨',
+    menu: { status: 'draft', revision: 0, items: [], note: '' },
+  }
+}
+function draftItem(item: MenuItem): DraftItem {
+  return {
+    dishId: item.dishId ?? null,
+    customId: item.customId ?? null,
+    name: item.name || '',
+    quantity: Number(item.quantity),
+    imageUrl: item.imageUrl || '',
+    note: item.note || '',
+    key: item.dishId != null ? 'dish:' + item.dishId : 'custom:' + item.customId,
+  }
+}
+function totalFor(sources: DraftSource[], key: string) {
+  return sources.reduce(
+    (sum, source) => sum + (source.items.find((item) => item.key === key)?.quantity || 0),
+    0,
+  )
+}
+function applyEditor(order: KitchenPeriod, mode: EditMode | null = null) {
+  const chefSourceId = order.chefParticipantId || '__chef__'
+  const sources: DraftSource[] = order.participants.map((person) => ({
+    sourceId: person.id,
+    participantId: person.id,
+    displayName: person.displayName,
+    avatarUrl: person.avatarUrl,
+    batchId: person.batchId,
+    submitted: person.submitted,
+    offMenu: person.offMenu,
+    remark: person.remark,
+    items: [...person.items, ...(person.customItems || [])].map(draftItem),
+  }))
+  let chef = sources.find((source) => source.sourceId === chefSourceId)
+  if (!chef) {
+    chef = {
+      sourceId: chefSourceId,
+      participantId: null,
+      displayName: order.chefDisplayName || '主厨',
+      avatarUrl: order.chefAvatarUrl,
+      batchId: order.activeBatchId,
+      submitted: false,
+      items: [],
+      offMenu: '',
+      remark: '',
     }
-    const card = map.get(key)!
-    card.periodMap[row.mealPeriodCode] = row
-    card.totalCount += Number(row.itemCount || 0)
-    card.isScheduled = card.date > today
+    sources.push(chef)
   }
-  return [...map.values()].sort((a, b) => {
-    if (a.isScheduled !== b.isScheduled) return a.isScheduled ? -1 : 1
-    if (a.isScheduled && b.isScheduled) return a.date.localeCompare(b.date, 'zh-CN')
-    return b.date.localeCompare(a.date, 'zh-CN')
+  const items = order.workingItems.map(draftItem)
+  const metadata: Record<string, DraftItem> = Object.fromEntries(
+    items.map((item) => [item.key, item]),
+  )
+  for (const source of sources) for (const item of source.items) metadata[item.key] ||= { ...item }
+  Object.assign(editors[order.period], {
+    revision: order.menu.revision,
+    stateRevision: order.stateRevision,
+    batchId: order.activeBatchId,
+    versions: { ...order.contributionVersions },
+    chefSourceId,
+    sources,
+    items,
+    metadata,
+    baseline: sources.map((source) => ({
+      sourceId: source.sourceId,
+      items: source.items.map((item) => ({ key: item.key, quantity: item.quantity })),
+    })),
+    inputs: {},
+    inputLimits: {},
+    inputErrors: {},
+    note: order.menu.note || '',
+    mode,
+    dirty: false,
+    error: '',
+    catalogueId: '',
   })
 }
-
-async function fetchOrdersByRange(fromDate: string, toDate: string): Promise<Order[]> {
-  const merged: Order[] = []
-  const chunk = 200
-  let total = 0
-  let currentPage = 1
-  // 安全上限，避免异常 total 导致死循环
-  const maxPages = 20
-  do {
-    const qs = new URLSearchParams()
-    qs.set('from', fromDate)
-    qs.set('to', toDate)
-    qs.set('page', String(currentPage))
-    qs.set('limit', String(chunk))
-    const data = await getData<OrdersResp>(`/orders?${qs.toString()}`)
-    total = Number(data.meta?.total ?? 0)
-    merged.push(...(data.items ?? []))
-    currentPage += 1
-    if (currentPage > maxPages + 1) break
-  } while (merged.length < total)
-  return merged
+function sameVersions(left: Record<string, number>, right: Record<string, number>) {
+  const keys = Object.keys(left)
+  return keys.length === Object.keys(right).length && keys.every((key) => left[key] === right[key])
 }
-
-async function load() {
-  loading.value = true
-  error.value = null
+function menuChanged(order: KitchenPeriod) {
+  return editors[order.period].revision !== order.menu.revision
+}
+function sourcesChanged(order: KitchenPeriod) {
+  const editor = editors[order.period]
+  return (
+    editor.stateRevision !== order.stateRevision ||
+    editor.batchId !== order.activeBatchId ||
+    !sameVersions(editor.versions, order.contributionVersions)
+  )
+}
+async function loadKitchen(reset = false) {
+  const date = selectedDate.value,
+    serial = ++requestSerial
+  if (reset) loading.value = true
+  else refreshing.value = true
   try {
-    // 管理端默认展示所有点餐记录，预约与普通记录都在同一数据集中展示
-    const rows = await fetchOrdersByRange('2000-01-01', '2099-12-31')
-    allOrders.value = rows
-    dayCards.value = buildDayCards(rows)
-    const maxPage = Math.max(1, Math.ceil(filteredDayCards.value.length / size.value))
-    if (page.value > maxPage) page.value = maxPage
-    syncQuery()
-  } catch (e) {
-    error.value = getApiErrorMessage(e, '加载点菜记录失败，请稍后重试', {
-      DISHES_ACCESS_DENIED: '当前账号无权访问点菜记录',
-    })
+    const data = await getData<{ date: string; periods: KitchenPeriod[] }>(
+      '/kitchen?date=' + encodeURIComponent(date),
+    )
+    if (disposed || serial !== requestSerial || date !== selectedDate.value) return
+    orders.value = PERIODS.map(
+      ({ code, name }) =>
+        data.periods.find((period) => period.period === code) || emptyPeriod(code, name),
+    )
+    for (const order of orders.value)
+      if (reset || (!editors[order.period].mode && !editors[order.period].saving))
+        applyEditor(order)
+    if (!periodChosen) {
+      selectedPeriod.value =
+        orders.value.find(
+          (order) =>
+            order.participants.length &&
+            (order.needsConfirmation || order.menu.status === 'draft' || order.hasDraftChanges),
+        )?.period || selectedPeriod.value
+      periodChosen = true
+    }
+    loadError.value = ''
+  } catch (error) {
+    if (!disposed && serial === requestSerial)
+      loadError.value = getApiErrorMessage(error, '厨房工作台加载失败，请稍后重试')
   } finally {
-    loading.value = false
+    if (!disposed && serial === requestSerial) {
+      loading.value = false
+      refreshing.value = false
+    }
   }
 }
-
-const filteredDayCards = computed(() => {
-  const d = queryDate.value.trim()
-  if (!d) return dayCards.value
-  return dayCards.value.filter((x) => x.date === d)
-})
-
-const pagedDayCards = computed(() => {
-  const start = (page.value - 1) * size.value
-  return filteredDayCards.value.slice(start, start + size.value)
-})
-
-function periodName(code: PeriodCode) {
-  return PERIODS.find((x) => x.code === code)?.name ?? code
-}
-
-function onSearch() {
-  page.value = 1
-  syncQuery()
-}
-
-function clearDateFilter() {
-  queryDate.value = ''
-  page.value = 1
-  syncQuery()
-}
-
-function onRefresh() {
-  void load()
-}
-
-async function openDetail(o: Order) {
-  if (detailOpening.value) return
-  detailOpening.value = true
-  const requestId = ++detailRequestSeq.value
-  detailOpen.value = true
-  detailLoading.value = true
-  detailError.value = null
-  detail.value = null
+async function loadCatalogue() {
   try {
-    const next = await getData<OrderDetailResp>(`/orders/${o.id}`)
-    // 只接收最后一次点击的返回，避免连续点击导致竞态覆盖
-    if (requestId !== detailRequestSeq.value) return
-    detail.value = next
-  } catch (e) {
-    if (requestId !== detailRequestSeq.value) return
-    detailError.value = getApiErrorMessage(e, '加载明细失败，请稍后重试', {
-      DISHES_NOT_FOUND: '该记录不存在，可能已被删除',
-    })
-  } finally {
-    if (requestId !== detailRequestSeq.value) return
-    detailLoading.value = false
-    detailOpening.value = false
+    const data = await getData<{ items: Dish[] }>('/dishes')
+    if (!disposed) {
+      catalogue.value = data.items || []
+      catalogueError.value = ''
+    }
+  } catch (error) {
+    if (!disposed) catalogueError.value = getApiErrorMessage(error, '菜谱暂未加载，可稍后刷新')
   }
 }
-
-function closeDetail() {
-  detailRequestSeq.value += 1
-  detailOpening.value = false
-  detailOpen.value = false
-  detailLoading.value = false
-  detailError.value = null
-  detail.value = null
+function refresh() {
+  void loadKitchen()
+  void loadCatalogue()
 }
-
-const detailItems = computed(() => detail.value?.order?.items ?? [])
-const detailReady = computed(() => !detailLoading.value && !detailError.value && !!detail.value)
-
-onMounted(() => {
-  setFromQuery()
-  void load()
-})
-
+function changeDate(value: string) {
+  const date = normalizeDate(value)
+  if (!date || date === selectedDate.value || anySaving.value) return false
+  if (anyDirty.value && !window.confirm('菜单修改还未提交，切换日期会放弃这些修改。是否继续？'))
+    return false
+  selectedDate.value = date
+  orders.value = []
+  for (const { code } of PERIODS) Object.assign(editors[code], emptyEditor())
+  void router.replace({ query: { ...route.query, date, period: selectedPeriod.value } })
+  void loadKitchen(true)
+  return true
+}
+function onDateInput(event: Event) {
+  const input = event.target as HTMLInputElement,
+    value = input.value
+  input.value = selectedDate.value
+  changeDate(value)
+}
+function moveDate(offset: number) {
+  const date = new Date(selectedDate.value + 'T12:00:00Z')
+  date.setUTCDate(date.getUTCDate() + offset)
+  changeDate(date.toISOString().slice(0, 10))
+}
+function changePeriod(event: Event) {
+  const period = normalizePeriod((event.target as HTMLSelectElement).value)
+  if (!period || anySaving.value) return
+  selectedPeriod.value = period
+  periodChosen = true
+  void router.replace({ query: { ...route.query, date: selectedDate.value, period } })
+}
+function beginEdit(order: KitchenPeriod, mode: EditMode) {
+  if (anySaving.value || editors[order.period].mode) return
+  applyEditor(order, mode)
+}
+function cancelEdit(order: KitchenPeriod) {
+  if (anySaving.value) return
+  if (!editors[order.period].dirty || window.confirm('放弃本次修改？')) applyEditor(order)
+}
+function markDirty(period: PeriodCode) {
+  editors[period].dirty = true
+  editors[period].error = ''
+}
+function isSoldOut(dishId: number | null) {
+  return dishId != null && !!catalogue.value.find((dish) => dish.id === dishId)?.soldOut
+}
+function validQuantity(value: number, max: number) {
+  return Number.isSafeInteger(value) && value >= 0 && value <= max
+}
+function inputValue(editor: Editor, key: string, quantity: number) {
+  return editor.inputs[key] ?? quantity
+}
+function readQuantity(editor: Editor, key: string, event: Event, max: number) {
+  const value = (event.target as HTMLInputElement).value
+  editor.inputs[key] = value
+  editor.inputLimits[key] = max
+  editor.dirty = true
+  editor.error = ''
+  if (!value.trim() || !validQuantity(Number(value), max)) {
+    editor.inputErrors[key] = '请输入有效的整数份数'
+    return null
+  }
+  delete editor.inputErrors[key]
+  return Number(value)
+}
+function sourceInputKey(source: DraftSource, item: DraftItem) {
+  return source.sourceId + '/' + item.key
+}
+function sourceMaximum(editor: Editor, source: DraftSource, item: DraftItem) {
+  return source.sourceId === editor.chefSourceId
+    ? 9999
+    : Math.max(
+        99,
+        editor.baseline
+          .find((entry) => entry.sourceId === source.sourceId)
+          ?.items.find((entry) => entry.key === item.key)?.quantity || 0,
+      )
+}
+function rebuildTotals(editor: Editor) {
+  const keys = new Set([
+    ...editor.items.map((item) => item.key),
+    ...editor.sources.flatMap((source) => source.items.map((item) => item.key)),
+  ])
+  editor.items = [...keys].map((key) => ({
+    ...editor.metadata[key]!,
+    key,
+    quantity: totalFor(editor.sources, key),
+  }))
+}
+function changeSourceQuantity(
+  order: KitchenPeriod,
+  source: DraftSource,
+  item: DraftItem,
+  event: Event,
+) {
+  const editor = editors[order.period]
+  if (editor.mode !== 'requests' || anySaving.value) return
+  const quantity = readQuantity(
+    editor,
+    sourceInputKey(source, item),
+    event,
+    sourceMaximum(editor, source, item),
+  )
+  if (quantity === null) return
+  const original =
+    editor.baseline
+      .find((entry) => entry.sourceId === source.sourceId)
+      ?.items.find((entry) => entry.key === item.key)?.quantity || 0
+  if (isSoldOut(item.dishId) && quantity > original) {
+    editor.error = '缺货菜品不能增加份数'
+    editor.inputErrors[sourceInputKey(source, item)] = editor.error
+    return
+  }
+  item.quantity = quantity
+  rebuildTotals(editor)
+}
+function redistribute(editor: Editor) {
+  try {
+    const targets = Object.fromEntries(editor.items.map((item) => [item.key, item.quantity]))
+    const allocation = allocateKitchenQuantities(editor.baseline, targets, editor.chefSourceId)
+    editor.sources = allocation.map((entry) => {
+      const source = editor.sources.find((value) => value.sourceId === entry.sourceId)!
+      return {
+        ...source,
+        items: entry.items.map((item) => ({
+          ...(source.items.find((value) => value.key === item.key) || editor.metadata[item.key]!),
+          key: item.key,
+          quantity: item.quantity,
+        })),
+      }
+    })
+    delete editor.inputErrors.allocation
+  } catch (error) {
+    editor.error = error instanceof RangeError ? error.message : '份数无法分配，请调整后重试'
+    editor.inputErrors.allocation = editor.error
+  }
+}
+function changeMenuQuantity(order: KitchenPeriod, item: DraftItem, event: Event) {
+  const editor = editors[order.period]
+  if (editor.mode !== 'menu' || anySaving.value) return
+  const quantity = readQuantity(editor, 'menu/' + item.key, event, 9999)
+  if (quantity === null) return
+  const original = editor.baseline.reduce(
+    (sum, source) => sum + (source.items.find((entry) => entry.key === item.key)?.quantity || 0),
+    0,
+  )
+  if (isSoldOut(item.dishId) && quantity > original) {
+    editor.error = '缺货菜品不能增加份数'
+    editor.inputErrors['menu/' + item.key] = editor.error
+    return
+  }
+  item.quantity = quantity
+  redistribute(editor)
+}
+function changeCustomName(order: KitchenPeriod, item: DraftItem) {
+  const editor = editors[order.period]
+  editor.metadata[item.key] = { ...item }
+  for (const source of editor.sources)
+    for (const selection of source.items) if (selection.key === item.key) selection.name = item.name
+  markDirty(order.period)
+}
+function addCatalogueDish(order: KitchenPeriod) {
+  const editor = editors[order.period]
+  if (editor.mode !== 'menu' || anySaving.value) return
+  const dish = availableDishes.value.find((entry) => entry.id === Number(editor.catalogueId))
+  if (!dish || dish.soldOut) return
+  const key = 'dish:' + dish.id
+  const existing = editor.items.find((item) => item.key === key)
+  if (existing) {
+    existing.quantity = Math.min(9999, existing.quantity + 1)
+    editor.inputs['menu/' + key] = String(existing.quantity)
+    delete editor.inputErrors['menu/' + key]
+  } else {
+    if (editor.items.length >= 200) {
+      Toast.warning('每餐最多安排 200 道菜')
+      return
+    }
+    const item = draftItem({
+      dishId: dish.id,
+      name: dish.name,
+      imageUrl: dish.imageUrl || '',
+      quantity: 1,
+      note: '',
+    })
+    editor.items.push(item)
+    editor.metadata[key] = { ...item }
+  }
+  editor.catalogueId = ''
+  markDirty(order.period)
+  redistribute(editor)
+}
+function addCustomDish(order: KitchenPeriod) {
+  const editor = editors[order.period]
+  if (editor.mode !== 'menu' || anySaving.value) return
+  if (editor.items.length >= 200) {
+    Toast.warning('每餐最多安排 200 道菜')
+    return
+  }
+  const item = draftItem({
+    dishId: null,
+    customId: crypto.randomUUID(),
+    name: '',
+    quantity: 1,
+    imageUrl: '',
+    note: '',
+  })
+  editor.items.push(item)
+  editor.metadata[item.key] = { ...item }
+  markDirty(order.period)
+  redistribute(editor)
+}
+function zeroMenuItem(order: KitchenPeriod, item: DraftItem) {
+  const editor = editors[order.period]
+  if (editor.mode !== 'menu' || anySaving.value) return
+  item.quantity = 0
+  editor.inputs['menu/' + item.key] = '0'
+  delete editor.inputErrors['menu/' + item.key]
+  markDirty(order.period)
+  redistribute(editor)
+}
+function visibleSources(order: KitchenPeriod) {
+  const editor = editors[order.period]
+  return editor.sources.filter(
+    (source) => source.participantId !== null || (editor.mode && source.items.length),
+  )
+}
+function sourceGroupLabel(order: KitchenPeriod, index: number) {
+  const sources = visibleSources(order),
+    source = sources[index]!
+  return index === 0 || source.batchId !== sources[index - 1]?.batchId
+    ? source.submitted
+      ? '已提交'
+      : '待提交'
+    : ''
+}
+function displayedMenu(order: KitchenPeriod) {
+  const editor = editors[order.period]
+  return !editor.mode && order.menu.status === 'confirmed'
+    ? order.menu.items.map(draftItem)
+    : editor.items
+}
+function validateEditor(editor: Editor) {
+  if (
+    Object.entries(editor.inputs).some(
+      ([key, value]) =>
+        !value.trim() || !validQuantity(Number(value), editor.inputLimits[key] || 9999),
+    )
+  )
+    return '请输入有效的整数份数'
+  const inputError = Object.values(editor.inputErrors)[0]
+  if (inputError) return inputError
+  if (editor.items.length > 200) return '每餐最多安排 200 道菜'
+  if (editor.items.some((item) => !validQuantity(item.quantity, 9999)))
+    return '份数须为 0 到 9999 之间的整数'
+  if (
+    editor.items.some(
+      (item) => item.quantity > 0 && (!item.name.trim() || item.name.trim().length > 128),
+    )
+  )
+    return '请填写每道菜的名称，最多 128 字'
+  if (editor.items.some((item) => item.note.length > 255)) return '每道菜的备注最多 255 字'
+  if (editor.note.length > 1000) return '本餐备注最多 1000 字'
+  return ''
+}
+async function confirmMenu(order: KitchenPeriod) {
+  const editor = editors[order.period]
+  if (anySaving.value || !editor.mode || menuChanged(order) || sourcesChanged(order)) return
+  editor.error = validateEditor(editor)
+  if (editor.error) return
+  if (!editor.items.some((item) => item.quantity > 0)) {
+    Dialog.warning({
+      title: '确认' + order.periodName + '暂无菜品',
+      description: '这餐将确定为暂无菜品，待提交点菜会一并提交并锁定。',
+      showCancel: true,
+      onConfirm: () => performConfirm(order),
+    })
+    return
+  }
+  await performConfirm(order)
+}
+async function performConfirm(order: KitchenPeriod) {
+  const editor = editors[order.period]
+  if (anySaving.value || !editor.mode || menuChanged(order) || sourcesChanged(order)) return
+  const date = selectedDate.value
+  const payload = {
+    date,
+    period: order.period,
+    batchId: editor.batchId,
+    stateRevision: editor.stateRevision,
+    revision: editor.revision,
+    contributionVersions: { ...editor.versions },
+    mode: editor.mode,
+    ...(editor.mode === 'requests'
+      ? {
+          sourceQuantities: editor.sources
+            .filter((source) => source.participantId !== null || source.items.length)
+            .map((source) => ({
+              participantId: source.participantId,
+              items: source.items.map((item) => ({ key: item.key, quantity: item.quantity })),
+            })),
+        }
+      : {}),
+    items: editor.items.map((item) => ({
+      dishId: item.dishId,
+      customId: item.customId ?? null,
+      name: item.name.trim(),
+      quantity: item.quantity,
+      imageUrl: item.imageUrl,
+      note: item.note,
+    })),
+    note: editor.note.trim(),
+  }
+  editor.saving = true
+  editor.error = ''
+  try {
+    const result = await postData<{ order: KitchenPeriod }>('/kitchen/commit', payload)
+    if (disposed || date !== selectedDate.value) return
+    orders.value = orders.value.map((entry) =>
+      entry.period === result.order.period ? result.order : entry,
+    )
+    applyEditor(result.order)
+    Toast.success(order.periodName + '菜单已确认')
+    await loadKitchen()
+  } catch (error) {
+    if (!disposed && date === selectedDate.value) {
+      editor.error = getApiErrorMessage(error, '提交失败，请稍后重试')
+      await loadKitchen()
+    }
+  } finally {
+    editor.saving = false
+  }
+}
+function initial(name: string) {
+  return Array.from(name.trim())[0] || '?'
+}
+function onVisible() {
+  if (document.activeElement?.matches('.kitchen-source-quantity')) return
+  if (!document.hidden && !loading.value && !refreshing.value && !anySaving.value) refresh()
+}
 watch(
-  () => route.query,
-  () => {
-    setFromQuery()
+  () => route.query.date,
+  (value) => {
+    const date = normalizeDate(value) || chinaToday()
+    if (date !== selectedDate.value && !changeDate(date))
+      void router.replace({
+        query: { ...route.query, date: selectedDate.value, period: selectedPeriod.value },
+      })
   },
 )
+watch(
+  () => route.query.period,
+  (value) => {
+    const period = normalizePeriod(value)
+    if (period && !anySaving.value) {
+      selectedPeriod.value = period
+      periodChosen = true
+    }
+  },
+)
+onBeforeRouteLeave(
+  () => !anyDirty.value || window.confirm('菜单修改还未提交，离开会放弃这些修改。是否继续？'),
+)
+onMounted(() => {
+  void loadKitchen(true)
+  void loadCatalogue()
+  document.addEventListener('visibilitychange', onVisible)
+  window.addEventListener('focus', onVisible)
+})
+onBeforeUnmount(() => {
+  disposed = true
+  requestSerial += 1
+  document.removeEventListener('visibilitychange', onVisible)
+  window.removeEventListener('focus', onVisible)
+})
 </script>
 
 <template>
-  <VPageHeader title="点菜记录">
-    <template #icon>
-      <RiFileList3Line />
-    </template>
+  <VPageHeader title="厨房工作台">
+    <template #icon><RiFileList3Line /></template>
+    <template #actions
+      ><VButton
+        class="kitchen-refresh-button"
+        aria-label="刷新厨房工作台"
+        title="刷新"
+        :disabled="loading || refreshing || anySaving"
+        @click="refresh"
+        ><RiRefreshLine class="kitchen-action-icon" aria-hidden="true" /></VButton
+    ></template>
   </VPageHeader>
-
-  <div class="orders-page :uno: p-4">
-    <VCard class="orders-main-card" :body-class="[':uno: !p-0']">
-      <template #header>
-        <div class="orders-toolbar :uno: block w-full px-4 py-4">
-          <div class=":uno: flex flex-wrap items-end justify-between gap-3">
-            <div class=":uno: flex flex-wrap items-end gap-3">
-              <div>
-                <div class="orders-label">按日期查询</div>
-                <input v-model="queryDate" type="date" class="orders-input" />
-              </div>
-              <VButton type="primary" class="orders-search-btn" :disabled="loading" @click="onSearch">查询</VButton>
-              <VButton :disabled="loading || !queryDate" @click="clearDateFilter">清空</VButton>
-            </div>
-
-            <div class=":uno: flex items-center gap-2">
-              <div class="orders-meta">共 {{ filteredDayCards.length }} 天 / {{ allOrders.length }} 条</div>
-              <VButton :disabled="loading" @click="onRefresh">刷新</VButton>
-            </div>
-          </div>
-        </div>
-      </template>
-
-      <div class=":uno: p-4">
-        <div v-if="error" class="orders-error">{{ error }}</div>
-        <div v-else-if="loading" class="orders-loading">加载中…</div>
-        <VEmpty v-else-if="dayCards.length === 0" title="暂无点餐记录" description="当前日期范围内没有可展示的数据。" />
-
-        <div v-else class="orders-day-list">
-          <div
-            v-for="card in pagedDayCards"
-            :key="card.date"
-            class="orders-day-card"
-            :class="{ 'orders-day-card--scheduled': card.isScheduled }"
+  <div class="orders-page kitchen-page">
+    <div class="kitchen-date-bar">
+      <div class="kitchen-date-controls">
+        <VButton :disabled="anySaving" aria-label="前一天" @click="moveDate(-1)"
+          ><RiArrowLeftSLine class="kitchen-action-icon" aria-hidden="true"
+        /></VButton>
+        <input
+          type="date"
+          :value="selectedDate"
+          :disabled="anySaving"
+          aria-label="菜单日期"
+          class="kitchen-control kitchen-date-input"
+          @change="onDateInput"
+        />
+        <VButton :disabled="anySaving" aria-label="后一天" @click="moveDate(1)"
+          ><RiArrowRightSLine class="kitchen-action-icon" aria-hidden="true"
+        /></VButton>
+        <VButton
+          :disabled="anySaving || selectedDate === chinaToday()"
+          @click="changeDate(chinaToday())"
+          >今天</VButton
+        >
+      </div>
+      <select
+        class="kitchen-control kitchen-period-select"
+        :value="selectedPeriod"
+        aria-label="餐次"
+        :disabled="loading || anySaving"
+        @change="changePeriod"
+      >
+        <option v-for="period in PERIODS" :key="period.code" :value="period.code">
+          {{ period.name }}
+        </option>
+      </select>
+    </div>
+    <p v-if="loadError" class="kitchen-alert kitchen-alert--error" role="alert">
+      {{ loadError }}<span v-if="orders.length">；下方保留上次加载的内容。</span>
+    </p>
+    <p v-if="loading" class="kitchen-empty" role="status">加载中…</p>
+    <p v-if="catalogueError" class="kitchen-alert" role="status">{{ catalogueError }}</p>
+    <section
+      v-for="order in selectedOrders"
+      v-show="!loading"
+      :key="order.period"
+      class="kitchen-columns"
+      :data-period="order.period"
+      :aria-label="order.periodName"
+    >
+      <div class="kitchen-requests" data-kitchen-requests>
+        <div class="kitchen-menu-heading">
+          <h3 class="kitchen-region-heading">点餐记录</h3>
+          <VButton
+            v-if="editors[order.period].mode === 'requests'"
+            size="sm"
+            :disabled="anySaving"
+            @click="cancelEdit(order)"
+            >取消修改</VButton
           >
-            <div class="orders-day-head">
-              <div class="orders-day-date-wrap">
-                <div class="orders-day-date">{{ card.date }}</div>
-                <span v-if="card.isScheduled" class="orders-scheduled-badge">预约</span>
-              </div>
-              <div class="orders-day-count">{{ card.isScheduled ? '预约共' : '当日共' }} {{ card.totalCount }} 样菜品</div>
+          <VButton
+            v-else
+            size="sm"
+            :disabled="anySaving || !!editors[order.period].mode"
+            @click="beginEdit(order, 'requests')"
+            >调整点餐</VButton
+          >
+        </div>
+        <p v-if="!visibleSources(order).length" class="kitchen-empty">还没有点餐</p>
+        <template v-for="(source, sourceIndex) in visibleSources(order)" :key="source.sourceId">
+          <h4 v-if="sourceGroupLabel(order, sourceIndex)" class="kitchen-group-heading">
+            {{ sourceGroupLabel(order, sourceIndex) }}
+          </h4>
+          <article class="kitchen-person" :data-source="source.sourceId">
+            <div class="kitchen-person-heading">
+              <img
+                v-if="source.avatarUrl && !failedAvatars.has(source.sourceId)"
+                :src="source.avatarUrl"
+                alt=""
+                width="32"
+                height="32"
+                class="kitchen-avatar"
+                @error="failedAvatars.add(source.sourceId)"
+              />
+              <span v-else class="kitchen-avatar kitchen-avatar--fallback" aria-hidden="true">{{
+                initial(source.displayName)
+              }}</span>
+              <h5>{{ source.displayName }}</h5>
             </div>
-
-            <div class="orders-period-grid">
-              <div v-for="p in PERIODS" :key="p.code" class="orders-period-col">
-                <div class="orders-period-title">{{ p.name }}</div>
-                <template v-if="card.periodMap[p.code]">
-                  <div class="orders-period-value">{{ card.periodMap[p.code]?.itemCount }} 样菜品</div>
-                  <VButton size="sm" :disabled="detailLoading" @click="openDetail(card.periodMap[p.code]!)">查看明细</VButton>
-                </template>
-                <template v-else>
-                  <div class="orders-period-empty">未点餐</div>
-                </template>
-              </div>
+            <ul v-if="source.items.length" class="kitchen-request-items">
+              <li v-for="item in source.items" :key="item.key" :data-item="item.key">
+                <span class="kitchen-request-name"
+                  >{{ item.name
+                  }}<small v-if="isSoldOut(item.dishId)" class="kitchen-muted"> · 缺货</small></span
+                >
+                <label
+                  v-if="editors[order.period].mode === 'requests'"
+                  class="kitchen-quantity-label"
+                >
+                  <input
+                    class="kitchen-control kitchen-source-quantity"
+                    type="number"
+                    min="0"
+                    :max="sourceMaximum(editors[order.period], source, item)"
+                    step="1"
+                    inputmode="numeric"
+                    :value="
+                      inputValue(editors[order.period], sourceInputKey(source, item), item.quantity)
+                    "
+                    :aria-label="'调整' + source.displayName + '的' + item.name + '份数'"
+                    :disabled="anySaving"
+                    @input="changeSourceQuantity(order, source, item, $event)"
+                  />
+                  份
+                </label>
+                <span v-else class="kitchen-quantity-label">{{ item.quantity }} 份</span>
+              </li>
+            </ul>
+            <p v-if="source.offMenu" class="kitchen-person-note">
+              <span>想吃其他菜：</span>{{ source.offMenu }}
+            </p>
+            <p v-if="source.remark" class="kitchen-person-note">
+              <span>本餐备注：</span>{{ source.remark }}
+            </p>
+          </article>
+        </template>
+      </div>
+      <VCard class="kitchen-menu-card" :body-class="[':uno: !p-0']">
+        <div class="kitchen-menu-body">
+          <div class="kitchen-menu-heading">
+            <h3 class="kitchen-region-heading">
+              最终菜单
+              <span v-if="order.needsConfirmation" class="kitchen-pending" role="status"
+                >待确认</span
+              >
+              <span
+                v-else-if="order.menu.status === 'confirmed' && !editors[order.period].mode"
+                class="kitchen-confirmed"
+                >已确认</span
+              >
+            </h3>
+            <VButton
+              v-if="editors[order.period].mode === 'menu'"
+              size="sm"
+              :disabled="anySaving"
+              @click="cancelEdit(order)"
+              >取消修改</VButton
+            >
+            <VButton
+              v-else
+              size="sm"
+              :disabled="anySaving || !!editors[order.period].mode"
+              @click="beginEdit(order, 'menu')"
+              >调整菜单</VButton
+            >
+          </div>
+          <div
+            v-if="editors[order.period].mode && (menuChanged(order) || sourcesChanged(order))"
+            class="kitchen-alert"
+            role="status"
+          >
+            点餐或菜单已更新，重新载入后再提交。
+            <button type="button" class="kitchen-text-button" @click="cancelEdit(order)">
+              载入最新
+            </button>
+          </div>
+          <p v-if="!displayedMenu(order).length" class="kitchen-empty">尚未安排菜品</p>
+          <div
+            v-for="(item, index) in displayedMenu(order)"
+            :key="item.key"
+            class="kitchen-menu-item"
+            :data-menu-item="item.key"
+          >
+            <input
+              v-if="item.dishId === null && editors[order.period].mode === 'menu'"
+              v-model="item.name"
+              class="kitchen-control kitchen-item-name"
+              maxlength="128"
+              :aria-label="order.periodName + '第 ' + (index + 1) + ' 道菜名称'"
+              placeholder="菜品名称"
+              :disabled="anySaving"
+              @input="changeCustomName(order, item)"
+            />
+            <span v-else class="kitchen-item-name">{{ item.name }}</span>
+            <label v-if="editors[order.period].mode === 'menu'" class="kitchen-quantity-label">
+              <input
+                type="number"
+                min="0"
+                max="9999"
+                step="1"
+                inputmode="numeric"
+                class="kitchen-control kitchen-menu-quantity"
+                :value="inputValue(editors[order.period], 'menu/' + item.key, item.quantity)"
+                :aria-label="(item.name || '菜品') + '份数'"
+                :disabled="anySaving"
+                @input="changeMenuQuantity(order, item, $event)"
+              />
+              份
+            </label>
+            <span v-else class="kitchen-quantity-label">{{ item.quantity }} 份</span>
+            <button
+              v-if="editors[order.period].mode === 'menu'"
+              type="button"
+              class="kitchen-remove"
+              :aria-label="'移除' + (item.name || '菜品')"
+              :disabled="anySaving"
+              @click="zeroMenuItem(order, item)"
+            >
+              <RiCloseLine class="kitchen-action-icon" aria-hidden="true" />
+            </button>
+          </div>
+          <div v-if="editors[order.period].mode === 'menu'" class="kitchen-add-row">
+            <select
+              v-model="editors[order.period].catalogueId"
+              class="kitchen-control kitchen-catalogue-select"
+              :aria-label="'为' + order.periodName + '添加菜谱里的菜'"
+              :disabled="anySaving"
+            >
+              <option value="">从菜谱添加</option>
+              <option
+                v-for="dish in availableDishes"
+                :key="dish.id"
+                :value="String(dish.id)"
+                :disabled="!!dish.soldOut"
+              >
+                {{ dish.name }}{{ dish.soldOut ? ' · 缺货' : '' }}
+              </option>
+            </select>
+            <VButton
+              size="sm"
+              :disabled="
+                anySaving ||
+                !editors[order.period].catalogueId ||
+                isSoldOut(Number(editors[order.period].catalogueId))
+              "
+              @click="addCatalogueDish(order)"
+              >添加</VButton
+            >
+            <VButton size="sm" :disabled="anySaving" @click="addCustomDish(order)"
+              >手写一道</VButton
+            >
+          </div>
+          <label v-if="editors[order.period].mode === 'menu'" class="kitchen-note-label"
+            >菜单备注<textarea
+              v-model="editors[order.period].note"
+              class="kitchen-control kitchen-note"
+              maxlength="1000"
+              rows="2"
+              aria-label="最终菜单备注"
+              :disabled="anySaving"
+              @input="markDirty(order.period)"
+            />
+          </label>
+          <p v-else-if="editors[order.period].note" class="kitchen-final-note">
+            {{ editors[order.period].note }}
+          </p>
+          <p v-if="editors[order.period].error" class="kitchen-form-error" role="alert">
+            {{ editors[order.period].error }}
+          </p>
+          <template v-if="editors[order.period].mode">
+            <p v-if="order.hasDraftChanges" class="kitchen-lock-notice">
+              确认时将一并提交并锁定待提交点菜。
+            </p>
+            <div class="kitchen-menu-actions">
+              <VButton
+                type="primary"
+                :loading="editors[order.period].saving"
+                :disabled="anySaving || menuChanged(order) || sourcesChanged(order)"
+                @click="confirmMenu(order)"
+                >确认{{ order.periodName }}菜单</VButton
+              >
             </div>
-          </div>
+          </template>
         </div>
-      </div>
-
-      <template #footer>
-        <div class=":uno: px-4 py-3">
-          <VPagination
-            v-model:page="page"
-            v-model:size="size"
-            :total="filteredDayCards.length"
-            :size-options="[10, 20, 30]"
-            @change="syncQuery"
-          />
-        </div>
-      </template>
-    </VCard>
-
-    <VModal :visible="detailOpen" title="点餐明细" @close="closeDetail">
-      <div class="orders-modal-body">
-        <div v-show="!!detailError" class="orders-error">{{ detailError }}</div>
-        <div v-show="detailLoading" class="orders-loading">加载中…</div>
-        <div v-show="detailReady" class=":uno: space-y-3">
-          <div class="orders-detail-meta">
-            <div><span class="orders-detail-label">日期：</span>{{ detail?.orderDate ?? '' }}</div>
-            <div><span class="orders-detail-label">餐段：</span>{{ detail?.mealPeriod?.name ?? '' }}</div>
-            <div><span class="orders-detail-label">样数：</span>{{ detail?.order?.item_count ?? 0 }}</div>
-            <div v-if="detail?.order?.remark"><span class="orders-detail-label">备注：</span>{{ detail?.order?.remark }}</div>
-          </div>
-          <div class=":uno: overflow-x-auto">
-            <table class="orders-detail-table">
-              <thead>
-                <tr>
-                  <th>菜品</th>
-                  <th>分类</th>
-                  <th>数量</th>
-                  <th>备注</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="it in detailItems" :key="it.line_id">
-                  <td>
-                    <div class="orders-dish-cell">
-                      <img
-                        v-if="it.dish.image_url"
-                        :src="it.dish.image_url"
-                        :alt="it.dish.name"
-                        class="orders-dish-thumb"
-                      />
-                      <div v-else class="orders-dish-thumb orders-dish-thumb--placeholder">
-                        {{ it.dish.name.slice(0, 1) }}
-                      </div>
-                      <div class="orders-dish-name">{{ it.dish.name }}</div>
-                    </div>
-                  </td>
-                  <td>{{ it.dish.category_name }}</td>
-                  <td>{{ it.quantity }}</td>
-                  <td>{{ it.note ?? '' }}</td>
-                </tr>
-                <tr v-if="detailItems.length === 0">
-                  <td colspan="4" class="orders-detail-empty">无明细</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div v-show="!detailLoading && !detailError && !detail" class="orders-loading">
-          暂无可展示明细
-        </div>
-      </div>
-    </VModal>
+      </VCard>
+    </section>
   </div>
 </template>
 
 <style scoped>
-.orders-page :deep(.halo-card) {
-  border-radius: 8px;
+.kitchen-action-icon {
+  width: 16px;
+  height: 16px;
 }
-
-.orders-main-card {
-  box-shadow: none;
+.kitchen-page {
+  min-width: 0;
 }
-
-.orders-main-card :deep(.card-header),
-.orders-main-card :deep(.card-footer) {
+.kitchen-refresh-button {
+  width: 32px;
+  height: 32px;
   padding: 0;
 }
-
-.orders-toolbar {
-  background: var(--ls-dishes-soft, #f7f7f8);
+.kitchen-date-bar,
+.kitchen-date-controls,
+.kitchen-person-heading,
+.kitchen-menu-heading,
+.kitchen-add-row,
+.kitchen-menu-actions,
+.kitchen-quantity-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-
-.orders-label {
-  margin-bottom: 0.25rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--ls-dishes-ink, #29292e);
-}
-
-.orders-input {
-  height: 2.25rem;
-  border: 1px solid rgb(212 212 216);
-  border-radius: 6px;
-  padding: 0 0.75rem;
-  font-size: 0.875rem;
-  border-color: var(--ls-dishes-line, #e8e8eb);
-  background: var(--ls-dishes-surface, #fff);
-  color: var(--ls-dishes-ink, #29292e);
-}
-
-.orders-search-btn {
-  background: rgb(24 24 27) !important;
-  border-color: rgb(24 24 27) !important;
-  color: #fff !important;
-}
-
-.orders-meta {
-  font-size: 0.875rem;
-  color: var(--ls-dishes-muted, #6b6b75);
-}
-
-.orders-error {
-  margin-bottom: 0.75rem;
-  border: 1px solid rgb(254 202 202);
-  background: rgb(254 242 242);
-  color: rgb(153 27 27);
-  border-radius: 8px;
-  padding: 0.75rem;
-  font-size: 0.875rem;
-}
-
-.orders-loading {
-  padding: 1.25rem 0;
-  color: var(--ls-dishes-muted, #6b6b75);
-  font-size: 0.875rem;
-}
-
-.orders-day-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.kitchen-date-bar {
+  flex-wrap: wrap;
   gap: 16px;
+  margin-bottom: 32px;
 }
-
-.orders-day-card {
+.kitchen-date-controls {
+  flex-wrap: wrap;
+}
+.kitchen-control {
+  min-width: 0;
+  box-sizing: border-box;
   border: 1px solid var(--ls-dishes-line, #e8e8eb);
   border-radius: 8px;
   background: var(--ls-dishes-surface, #fff);
-  overflow: hidden;
-}
-
-.orders-day-card--scheduled {
-  border-inline-start: 4px solid var(--ls-dishes-highlight, #e7b63e);
-}
-
-.orders-day-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px;
-  border-bottom: 1px solid var(--ls-dishes-line, #e8e8eb);
-  background: var(--ls-dishes-soft, #f7f7f8);
-}
-
-.orders-day-date {
-  font-size: 0.95rem;
-  font-weight: 600;
   color: var(--ls-dishes-ink, #29292e);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 8px;
 }
-
-.orders-day-date-wrap {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+.kitchen-control:focus-visible,
+.kitchen-text-button:focus-visible,
+.kitchen-remove:focus-visible {
+  outline: 2px solid var(--ls-dishes-gold, #946d12);
+  outline-offset: 2px;
 }
-
-.orders-scheduled-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 1.25rem;
-  padding: 0 0.5rem;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--ls-dishes-gold, #946d12);
-  background: var(--ls-dishes-gold-soft, #fff8e5);
+.kitchen-control:disabled {
+  opacity: 0.65;
 }
-
-.orders-day-count {
-  font-size: 0.8125rem;
-  color: var(--ls-dishes-muted, #6b6b75);
+.kitchen-date-input {
+  width: 152px;
+  height: 32px;
+  padding-block: 4px;
 }
-
-.orders-period-grid {
+.kitchen-period-select {
+  width: 96px;
+  height: 32px;
+  padding-block: 4px;
+}
+.kitchen-columns {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
+  grid-template-columns: minmax(256px, 1fr) minmax(320px, 1.3fr);
+  align-items: start;
+  gap: 32px;
 }
-
-.orders-period-col {
-  padding: 1rem;
-  border-right: 1px solid var(--ls-dishes-line, #e8e8eb);
-}
-
-.orders-period-col:last-child {
-  border-right: none;
-}
-
-.orders-period-title {
-  font-size: 0.8125rem;
-  color: var(--ls-dishes-muted, #6b6b75);
-  margin-bottom: 0.5rem;
-}
-
-.orders-period-value {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--ls-dishes-ink, #29292e);
-  margin-bottom: 0.5rem;
-}
-
-.orders-period-empty {
-  font-size: 0.875rem;
-  color: var(--ls-dishes-muted, #6b6b75);
-}
-
-.orders-modal-body {
-  min-height: 5rem;
-}
-
-.orders-detail-meta {
-  border: 1px solid rgb(228 228 231);
-  border-radius: 8px;
-  padding: 0.75rem;
-  font-size: 0.875rem;
-  display: grid;
-  gap: 0.375rem;
-}
-
-.orders-detail-label {
-  color: var(--ls-dishes-muted, #6b6b75);
-}
-
-.orders-detail-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
-}
-
-.orders-detail-table thead tr {
-  border-bottom: 1px solid rgb(228 228 231);
-  color: var(--ls-dishes-muted, #6b6b75);
-}
-
-.orders-detail-table th,
-.orders-detail-table td {
-  text-align: left;
-  padding: 0.625rem 0.5rem;
-}
-
-.orders-detail-table tbody tr {
-  border-bottom: 1px solid rgb(244 244 245);
-}
-
-.orders-detail-empty {
-  text-align: center;
-  color: var(--ls-dishes-muted, #6b6b75);
-  padding: 1rem 0;
-}
-
-.orders-dish-cell {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+.kitchen-requests {
   min-width: 0;
 }
-
-.orders-dish-thumb {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 0.375rem;
+.kitchen-region-heading {
+  margin: 0;
+  color: var(--ls-dishes-ink, #29292e);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.kitchen-request-group {
+  margin-top: 16px;
+}
+.kitchen-group-heading {
+  margin: 0;
+  padding-bottom: 8px;
+  color: var(--ls-dishes-muted, #6b6b75);
+  font-size: 12px;
+  font-weight: 400;
+}
+.kitchen-person {
+  padding-block: 16px;
+  border-top: 1px solid var(--ls-dishes-line, #e8e8eb);
+}
+.kitchen-person-heading {
+  min-width: 0;
+  margin-bottom: 8px;
+}
+.kitchen-person-heading h5 {
+  min-width: 0;
+  margin: 0;
+  color: var(--ls-dishes-ink, #29292e);
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.kitchen-avatar {
+  display: block;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   object-fit: cover;
-  background: rgb(244 244 245);
-  flex: 0 0 auto;
 }
-
-.orders-dish-thumb--placeholder {
+.kitchen-avatar--fallback {
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--ls-dishes-soft, #f7f7f8);
   color: var(--ls-dishes-muted, #6b6b75);
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 400;
 }
-
-.orders-dish-name {
+.kitchen-request-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.kitchen-request-items li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+}
+.kitchen-request-name {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.kitchen-muted {
+  color: var(--ls-dishes-muted, #6b6b75);
+  font-size: 12px;
+}
+.kitchen-quantity-label {
+  flex-shrink: 0;
+  gap: 4px;
+  color: var(--ls-dishes-muted, #6b6b75);
+  font-size: 12px;
   white-space: nowrap;
 }
-
-@media (max-width: 900px) {
-  .orders-day-list {
-    grid-template-columns: 1fr;
+.kitchen-source-quantity,
+.kitchen-menu-quantity {
+  width: 80px;
+  height: 32px;
+  padding-block: 4px;
+}
+.kitchen-person-note {
+  margin: 8px 0 0;
+  color: var(--ls-dishes-ink, #29292e);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.kitchen-person-note > span {
+  color: var(--ls-dishes-muted, #6b6b75);
+}
+.kitchen-menu-card {
+  min-width: 0;
+  border: 1px solid var(--ls-dishes-line, #e8e8eb);
+  border-radius: 8px;
+  background: var(--ls-dishes-surface, #fff);
+  box-shadow: none;
+}
+.kitchen-menu-body {
+  padding: 16px;
+}
+.kitchen-region-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.kitchen-menu-heading {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.kitchen-confirmed {
+  margin-left: 8px;
+  color: var(--ls-dishes-muted, #6b6b75);
+  font-size: 12px;
+  font-weight: 400;
+}
+.kitchen-pending {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--ls-dishes-gold-soft, #fff8e5);
+  color: var(--ls-dishes-gold, #946d12);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  vertical-align: middle;
+}
+.kitchen-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-block: 8px;
+  border-bottom: 1px solid var(--ls-dishes-line, #e8e8eb);
+}
+.kitchen-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.kitchen-remove {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ls-dishes-muted, #6b6b75);
+  background: transparent;
+  font: inherit;
+  font-size: 20px;
+  cursor: pointer;
+}
+.kitchen-remove:hover:not(:disabled) {
+  color: var(--ls-dishes-danger, #b91c1c);
+  background: var(--ls-dishes-soft, #f7f7f8);
+}
+.kitchen-add-row {
+  flex-wrap: wrap;
+  margin-block: 16px;
+}
+.kitchen-catalogue-select {
+  flex: 1;
+  width: 160px;
+}
+.kitchen-note-label {
+  display: block;
+  margin-top: 16px;
+  color: var(--ls-dishes-ink, #29292e);
+  font-size: 13px;
+}
+.kitchen-note {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  resize: vertical;
+}
+.kitchen-lock-notice {
+  margin: 8px 0 0;
+  color: var(--ls-dishes-muted, #6b6b75);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.kitchen-menu-actions {
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+.kitchen-alert {
+  margin: 0 0 16px;
+  padding: 8px 16px;
+  border-left: 2px solid var(--ls-dishes-highlight, #e7b63e);
+  background: var(--ls-dishes-gold-soft, #fff8e5);
+  color: var(--ls-dishes-ink, #29292e);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.kitchen-alert--error,
+.kitchen-form-error {
+  color: var(--ls-dishes-danger, #b91c1c);
+}
+.kitchen-form-error {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.kitchen-text-button {
+  border: 0;
+  background: transparent;
+  color: var(--ls-dishes-gold, #946d12);
+  padding: 4px;
+  text-decoration: underline;
+  font: inherit;
+  cursor: pointer;
+}
+.kitchen-empty {
+  padding: 16px 0;
+  margin: 0;
+  color: var(--ls-dishes-muted, #6b6b75);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.kitchen-final-row {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 8px;
+  color: var(--ls-dishes-ink, #29292e);
+  font-size: 14px;
+}
+.kitchen-final-row > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.kitchen-final-row > span:last-child {
+  flex-shrink: 0;
+}
+.kitchen-final-note {
+  margin: 16px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--ls-dishes-line, #e8e8eb);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+@media (max-width: 1023px) {
+  .kitchen-columns {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
   }
-
-  .orders-period-grid {
-    grid-template-columns: 1fr;
+}
+@media (max-width: 767px) {
+  .kitchen-date-bar {
+    margin-bottom: 16px;
   }
-
-  .orders-period-col {
-    border-right: none;
-    border-bottom: 1px solid var(--ls-dishes-line, #e8e8eb);
-  }
-
-  .orders-period-col:last-child {
-    border-bottom: none;
+  .kitchen-source-quantity,
+  .kitchen-menu-quantity {
+    width: 64px;
   }
 }
 </style>
-
