@@ -21,12 +21,15 @@ public class ExtensionSchemeRegistry {
     private static final Logger log = LoggerFactory.getLogger(ExtensionSchemeRegistry.class);
 
     private final SchemeManager schemeManager;
+    private final PluginActivationGuard activationGuard;
 
-    public ExtensionSchemeRegistry(SchemeManager schemeManager) {
+    public ExtensionSchemeRegistry(SchemeManager schemeManager, PluginActivationGuard activationGuard) {
         this.schemeManager = schemeManager;
+        this.activationGuard = activationGuard;
     }
 
     public synchronized void ensureRegistered() {
+        activationGuard.ensureExclusive();
         ensureDishCategory();
         ensureDish();
         ensureDishesSettings();
@@ -34,6 +37,7 @@ public class ExtensionSchemeRegistry {
     }
 
     public synchronized void rebuildAll() {
+        activationGuard.ensureExclusive();
         unregisterIfPresent(DishCategory.class);
         unregisterIfPresent(Dish.class);
         unregisterIfPresent(DishesSettings.class);

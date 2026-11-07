@@ -6,12 +6,14 @@ import com.dishes.api.BusinessErrorCode;
 import com.dishes.api.BusinessException;
 import com.dishes.domain.DishesStore;
 import com.dishes.domain.service.DishTags;
+import com.dishes.service.DishesSettingsService;
 
 
 import com.dishes.extension.MealTicketState;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -36,20 +38,23 @@ public class KitchenService {
 
     private final KitchenRepository repository;
     private final DishesStore catalogue;
+    private final DishesSettingsService settings;
     private final Clock clock;
 
     @Autowired
-    public KitchenService(KitchenRepository repository, DishesStore catalogue) {
-        this(repository, catalogue, Clock.system(ZoneId.of("Asia/Shanghai")));
+    public KitchenService(KitchenRepository repository, DishesStore catalogue, DishesSettingsService settings) {
+        this(repository, catalogue, settings, Clock.system(ZoneId.of("Asia/Shanghai")));
     }
-    public KitchenService(KitchenRepository repository, DishesStore catalogue, Clock clock) {
-        this.repository = repository; this.catalogue = catalogue;
+    public KitchenService(KitchenRepository repository, DishesStore catalogue, DishesSettingsService settings, Clock clock) {
+        this.repository = repository; this.catalogue = catalogue; this.settings = settings;
         this.clock = clock.withZone(ZoneId.of("Asia/Shanghai"));
     }
 
     public Map<String, Object> viewer(Identity identity) {
+        var now = LocalDateTime.now(clock); var schedule = settings.mealSchedule();
         return Map.of("authenticated", !identity.guest(), "displayName", identity.displayName(),
-            "canManage", identity.canManage(), "today", today().toString(), "maxDate", today().plusDays(7).toString());
+            "canManage", identity.canManage(), "today", now.toLocalDate().toString(), "maxDate", now.toLocalDate().plusDays(7).toString(),
+            "mealSchedule", schedule, "defaultPeriod", schedule.periodAt(now.toLocalTime()));
     }
 
     public synchronized Map<String, Object> order(String date, String period, Identity identity, boolean admin) {
@@ -85,7 +90,7 @@ public class KitchenService {
         var existing = contribution != null;
         var previous = existing ? contribution.getSpec() : null;
         if (previous != null && (!activeBatch.equals(batch(previous)) || submitted(ticket, batch(previous)))) {
-            throw new BusinessException(BusinessErrorCode.ACCESS_DENIED, "这批点餐已提交；主厨请在厨房调整，继续点餐会追加新的一批");
+            throw new BusinessException(BusinessErrorCode.ACCESS_DENIED, "这批点餐已提交；主厨请在后厨灶台调整，继续点餐会追加新的一批");
         }
         if (!activeBatch.equals(input.batchId())) {
             throw conflict("这餐已提交了新批次，请刷新后继续点餐");
@@ -171,8 +176,41 @@ public class KitchenService {
 
     public synchronized Map<String, Object> kitchen(String date, Identity identity) {
         requireChef(identity);
-        var day = parseDate(date).toString();
-        return Map.of("date", day, "periods", PERIODS.stream().map(p -> shared(day, p, identity, true)).toList());
+        var day = parseDate(date).toString(); var schedule = settings.mealSchedule();
+        return Map.of("date", day, "periods", PERIODS.stream().map(p -> shared(day, p, identity, true)).toList(),
+            "mealSchedule", schedule, "defaultPeriod", schedule.periodAt(LocalDateTime.now(clock).toLocalTime()));
+    }
+
+    /** Remove one participant and its approved quantities in the same meal-state CAS. */
+    public synchronized Map<String, Object> deleteParticipant(String date, String period, String participantId,
+                                                              long expectedStateRevision, Identity chef) {
+        requireChef(chef);
+        var day = parseDate(date).toString(); var meal = period(period); var id = safe(participantId).trim();
+        if (id.isEmpty() || expectedStateRevision < 0) throw invalid("请提供点餐人和当前订单版本");
+        var state = state(day, meal);
+        if (state.ticket().getSpec().getRevision() != expectedStateRevision) {
+            throw conflict("点餐或菜单已更新，请载入最新内容后再删除");
+        }
+        var sources = state.contributions();
+        var target = sources.stream().filter(source -> id.equals(source.getSpec().getParticipantId())).findFirst()
+            .orElseThrow(() -> new BusinessException(BusinessErrorCode.NOT_FOUND, "这餐的点餐记录已不存在"));
+        var menu = state.menu();
+        if (menu != null && menu.getSpec().getContributionVersions().containsKey(id)) {
+            var spec = menu.getSpec(); var deductions = sourceTotals(List.of(target));
+            var items = new ArrayList<MenuItem>();
+            for (var item : spec.getItems()) {
+                var remaining = (long) item.quantity() - deductions.getOrDefault(itemKey(item), 0L);
+                if (remaining > 0) items.add(withQuantity(item, remaining));
+            }
+            spec.setItems(List.copyOf(items)); spec.setRevision(spec.getRevision() + 1);
+            // Remove only this approval. Other submitted, unconfirmed participants must remain pending.
+            var approved = new LinkedHashMap<>(spec.getContributionVersions()); approved.remove(id);
+            spec.setContributionVersions(Map.copyOf(approved));
+        }
+        sources.remove(target);
+        increment(state.ticket());
+        repository.saveState(new KitchenState(state.ticket(), state.existing(), sources, menu));
+        return Map.of("order", shared(day, meal, chef, true));
     }
 
     /** A single detached proposal, allocation and publication, persisted with one meal-state CAS. */

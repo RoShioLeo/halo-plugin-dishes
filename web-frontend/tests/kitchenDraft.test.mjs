@@ -2,8 +2,34 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { ContextDraftStore, createRequestTracker, draftContent, draftKey, applicableToMeal, mealTagNames, isCurrentBatch, canEditSubmitted, updateSavedQuantity, freezeSubmissionPayload, catalogueIncludesDish, canIncreaseCatalogueDish, stockOrdered, isPublicQuantity } from '../src/utils/kitchenDraft.ts'
 import { createGuestNicknamePreference, GUEST_NICKNAME_KEY } from '../src/utils/guestNickname.ts'
+import { mealPeriodAt, preferredMealPeriod } from '../src/utils/mealSchedule.ts'
 
 const draft = (name = '番茄炒蛋', id = 1) => ({ revision: 0, items: [{ dishId: id, name, imageUrl: '', quantity: 1, note: '', tags: ['家常'] }], offMenu: '', remark: '', nickname: '小柠檬' })
+
+test('default meal cutoffs use Shanghai minutes at 10:00 and 15:00', () => {
+  const period = (time) => mealPeriodAt(new Date(`2026-11-05T${time}:00+08:00`))
+  assert.equal(period('09:59'), 'breakfast')
+  assert.equal(period('10:00'), 'lunch')
+  assert.equal(period('14:59'), 'lunch')
+  assert.equal(period('15:00'), 'dinner')
+})
+
+test('configured cutoffs preserve minute boundaries and an invalid configuration falls back to defaults', () => {
+  const schedule = { lunchStart: '09:30', dinnerStart: '14:30' }
+  const at = (time) => new Date(`2026-11-05T${time}:00+08:00`)
+  assert.equal(mealPeriodAt(at('09:29'), schedule), 'breakfast')
+  assert.equal(mealPeriodAt(at('09:30'), schedule), 'lunch')
+  assert.equal(mealPeriodAt(at('14:29'), schedule), 'lunch')
+  assert.equal(mealPeriodAt(at('14:30'), schedule), 'dinner')
+  assert.equal(mealPeriodAt(at('14:30'), { lunchStart: '15:00', dinnerStart: '10:00' }), 'lunch')
+})
+
+test('explicit and already selected meal contexts take priority over a refreshed default', () => {
+  assert.equal(preferredMealPeriod('breakfast', 'dinner'), 'breakfast')
+  assert.equal(preferredMealPeriod(undefined, 'lunch'), 'lunch')
+  assert.equal(preferredMealPeriod('invalid', 'dinner'), 'dinner')
+  assert.equal(preferredMealPeriod(undefined, undefined), undefined)
+})
 test('public quantities accept only integer counts from zero through 99', () => {
   for (const value of [0, 1, 99]) assert.equal(isPublicQuantity(value), true)
   for (const value of [0.015, 1.5, -1, 100, Number.NaN, Number.POSITIVE_INFINITY]) {

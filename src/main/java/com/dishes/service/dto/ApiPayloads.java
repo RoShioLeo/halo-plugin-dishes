@@ -28,19 +28,18 @@ public final class ApiPayloads {
     }
 
     public static Map<String, Object> settingsPayload(DishesSettings.Spec spec, String mode) {
-        return Map.of(
-            "basic", Map.of(
-                "accessMode", mode,
-                "accessPassword", spec.getAccessPassword() == null ? "" : spec.getAccessPassword(),
-                "accessPasswordSet", spec.getAccessPassword() != null && !spec.getAccessPassword().isBlank(),
-                "publicAccessUrl", spec.getPublicAccessUrl() == null ? "" : spec.getPublicAccessUrl(),
-                "publicLogoUrl", spec.getPublicLogoUrl() == null ? "" : spec.getPublicLogoUrl(),
-                "publicSiteTitle", spec.getPublicSiteTitle() == null ? "" : spec.getPublicSiteTitle(),
-                "publicBrandTitle", spec.getPublicBrandTitle() == null ? "" : spec.getPublicBrandTitle(),
-                "publicBrandSubtitle", spec.getPublicBrandSubtitle() == null ? "" : spec.getPublicBrandSubtitle(),
-                "publicDomainWhitelist", spec.getPublicDomainWhitelist() == null ? "" : spec.getPublicDomainWhitelist(),
-                "defaultPublicAccessUrl", "/dishes"
-            )
-        );
+        var basic = new java.util.LinkedHashMap<String, Object>();
+        basic.put("accessMode", mode);
+        basic.put("accessPassword", spec.getAccessPassword() == null ? "" : spec.getAccessPassword());
+        basic.put("accessPasswordSet", spec.getAccessPassword() != null && !spec.getAccessPassword().isBlank());
+        basic.put("publicAccessUrl", spec.getPublicAccessUrl() == null ? "" : spec.getPublicAccessUrl());
+        basic.put("publicLogoUrl", spec.getPublicLogoUrl() == null ? "" : spec.getPublicLogoUrl());
+        basic.put("publicSiteTitle", spec.getPublicSiteTitle() == null ? "" : spec.getPublicSiteTitle());
+        basic.put("publicBrandTitle", spec.getPublicBrandTitle() == null ? "" : spec.getPublicBrandTitle());
+        basic.put("publicBrandSubtitle", spec.getPublicBrandSubtitle() == null ? "" : spec.getPublicBrandSubtitle());
+        basic.put("publicDomainWhitelist", spec.getPublicDomainWhitelist() == null ? "" : spec.getPublicDomainWhitelist());
+        basic.put("defaultPublicAccessUrl", "/dishes");
+        basic.put("mealSchedule", com.dishes.domain.service.MealSchedule.normalize(spec.getMealSchedule()));
+        return Map.of("basic", basic);
     }
 }

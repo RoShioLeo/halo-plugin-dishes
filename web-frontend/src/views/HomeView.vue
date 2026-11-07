@@ -3,7 +3,7 @@ import KitchenIcon from '@/components/KitchenIcon.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { apiGet, getApiErrorMessage } from '@/api/http'
-import { defaultPeriod, isDate, kitchenViewer, loadViewer, mealContext, mealPeriods, normalizeDish, shanghaiToday } from '@/api/kitchen'
+import { isDate, isPeriod, kitchenViewer, loadViewer, mealContext, mealPeriods, normalizeDish, orderPeriod, shanghaiToday } from '@/api/kitchen'
 import type { DailyMenu, Dish } from '@/api/kitchen'
 import KitchenBrand from '@/components/KitchenBrand.vue'
 import KitchenFooter from '@/components/KitchenFooter.vue'
@@ -24,9 +24,10 @@ const visiblePeriods = computed(() => mealPeriods.flatMap((period) => {
   const found = menu.value?.periods.find((entry) => entry.code === period.code)
   return found?.status === 'confirmed' && found.items.length ? [found] : []
 }))
-const orderLink = computed(() => ({ path: '/order', query: { date: date.value, period: mealContext.value.period || defaultPeriod() } }))
-async function refresh(quiet = false) {
+const orderLink = computed(() => ({ path: '/order', query: { date: date.value, period: orderPeriod(route.query.period) } }))
+async function refresh(quiet = false, refreshViewer = true) {
   if (quiet && refreshing) return
+  if (refreshViewer) void loadViewer(true).catch(() => { /* Keep the current context when the optional refresh fails. */ })
   void refreshCatalogue()
   refreshing = true
   const current = ++sequence
@@ -65,15 +66,19 @@ watch(() => route.query.date, (value) => {
   mealContext.value = { ...mealContext.value, date: next }
   void refresh()
 })
+watch(() => route.query.period, (value) => {
+  if (isPeriod(value)) mealContext.value = { ...mealContext.value, period: value }
+}, { immediate: true })
 function onVisible() { if (!document.hidden) void refresh(true) }
 onMounted(async () => {
   try {
-    const viewer = await loadViewer()
+    const viewer = await loadViewer(true)
+    if (!alive) return
     if (!isDate(route.query.date)) date.value = viewer.today
     mealContext.value = { ...mealContext.value, date: date.value }
   } catch { /* The menu request below reports its own failure. */ }
   if (!alive) return
-  void refresh()
+  void refresh(false, false)
   window.addEventListener('focus', onVisible)
   document.addEventListener('visibilitychange', onVisible)
 })

@@ -3,7 +3,7 @@ import KitchenIcon from '@/components/KitchenIcon.vue'
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { ApiError, apiGet, apiPost, getApiErrorMessage } from '@/api/http'
-import { countSharedDishes, defaultPeriod, isDate, isPeriod, kitchenViewer, loadViewer, mealContext, mealPeriods, normalizeCustomItems, normalizeDish, periodName, quantityLabel, shanghaiToday, withinPublicCartLimit } from '@/api/kitchen'
+import { countSharedDishes, defaultPeriod, isDate, isPeriod, kitchenViewer, loadViewer, mealContext, mealPeriods, normalizeCustomItems, normalizeDish, orderPeriod, periodName, quantityLabel, shanghaiToday, withinPublicCartLimit } from '@/api/kitchen'
 import type { Dish, Participant, PeriodCode, SharedOrder } from '@/api/kitchen'
 import { resolveMediaUrl } from '@/utils/mediaUrl'
 import { stars } from '@/utils/recommendationDisplay'
@@ -197,7 +197,7 @@ function rebaseDraft() {
 function normalizeContext() {
   const viewer = kitchenViewer.value
   const requestedDate = isDate(route.query.date) ? route.query.date : viewer?.today || shanghaiToday()
-  return { date: requestedDate, period: isPeriod(route.query.period) ? route.query.period : defaultPeriod() }
+  return { date: requestedDate, period: orderPeriod(route.query.period) ?? defaultPeriod() }
 }
 async function loadContext() {
   closeShared(false)
@@ -579,7 +579,7 @@ watch(() => content(draft), () => { if (!hydrating) void scheduleAutosave() }, {
 onBeforeRouteUpdate(async (to) => {
   if (to.query.date === route.query.date && to.query.period === route.query.period) return true
   const targetDate = isDate(to.query.date) ? to.query.date : kitchenViewer.value?.today || shanghaiToday()
-  const targetPeriod = isPeriod(to.query.period) ? to.query.period : defaultPeriod()
+  const targetPeriod = orderPeriod(to.query.period) ?? defaultPeriod()
   if (targetDate === date.value && targetPeriod === period.value) return true
   return batchChanged.value ? (persistDraft(), true) : await flushPending()
 })

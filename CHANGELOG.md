@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.0 — 2026-11-08
+
+- Adopt the independent `lemonslice-kitchen` plugin ID and plain semantic versioning.
+- Set the displayed author and maintainer to RoShioLeo, retaining upstream notices and GPL-3.0.
+- Preserve the `/dishes` address, API routes and existing shared-kitchen storage when replacing the disabled `dishes` plugin.
+- Rename the chef workspace and its navigation entry to 后厨灶台.
+- Make meal cutover times configurable; default lunch starts at 10:00 and dinner at 15:00.
+- Allow the chef to delete one person's complete ordering record while keeping remarks read-only.
+- Use a single fitted focus border for public form controls without clipped outer outlines.
+
 ## 1.1.1-lemonslice.1 — 2026-11-05
 
 - Give first-time guests a remembered default nickname so autosave works immediately.

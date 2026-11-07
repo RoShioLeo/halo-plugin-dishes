@@ -54,15 +54,19 @@ class RemovedApiRoutesTest {
     @Test
     void currentSettingsExposeOnlyBasicConfigurationAndSaveCurrentFields() {
         when(admin.getSettings()).thenReturn(ApiPayloads.settingsPayload(new DishesSettings.Spec(), "none"));
-        when(admin.updateSettings(any(), any(), any(), any(), any(), any(), any(), any()))
+        when(admin.updateSettings(any(), any(), any(), any(), any(), any(), any(), any(), any()))
             .thenReturn(Map.of("updated", true));
         client.get().uri("/apis/plugins/dishes/admin/settings").exchange().expectStatus().isOk()
-            .expectBody().jsonPath("$.data.basic.accessMode").isEqualTo("none").jsonPath("$.data.notify").doesNotExist();
+            .expectBody().jsonPath("$.data.basic.accessMode").isEqualTo("none").jsonPath("$.data.notify").doesNotExist()
+            .jsonPath("$.data.basic.mealSchedule.lunchStart").isEqualTo("10:00")
+            .jsonPath("$.data.basic.mealSchedule.dinnerStart").isEqualTo("15:00");
         client.put().uri("/apis/plugins/dishes/admin/settings").bodyValue(Map.of("basic", Map.of(
             "accessMode", "password", "accessPassword", "secret", "publicAccessUrl", "/dishes",
             "publicLogoUrl", "/lemon.svg", "publicSiteTitle", "私厨", "publicBrandTitle", "柠檬私厨",
-            "publicBrandSubtitle", "今天想吃什么", "publicDomainWhitelist", "blog.lemonslice.cloud"
+            "publicBrandSubtitle", "今天想吃什么", "publicDomainWhitelist", "blog.lemonslice.cloud",
+            "mealSchedule", Map.of("lunchStart", "11:30", "dinnerStart", "18:15")
         ))).exchange().expectStatus().isOk();
-        verify(admin).updateSettings("password", "secret", "/dishes", "/lemon.svg", "私厨", "柠檬私厨", "今天想吃什么", "blog.lemonslice.cloud");
+        verify(admin).updateSettings("password", "secret", "/dishes", "/lemon.svg", "私厨", "柠檬私厨", "今天想吃什么", "blog.lemonslice.cloud",
+            new com.dishes.domain.service.MealSchedule("11:30", "18:15"));
     }
 }

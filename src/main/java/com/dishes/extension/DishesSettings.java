@@ -1,5 +1,6 @@
 package com.dishes.extension;
 
+import com.dishes.domain.service.MealSchedule;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -49,6 +50,9 @@ public class DishesSettings extends AbstractExtension {
 
         @Schema(description = "前台域名白名单（逗号或换行分隔，留空表示不限制）")
         private String publicDomainWhitelist;
+
+        @Schema(description = "默认餐次的午餐和晚餐切换时间，Asia/Shanghai，HH:mm")
+        private MealSchedule mealSchedule;
 
     }
 }

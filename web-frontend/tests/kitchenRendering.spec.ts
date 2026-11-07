@@ -1,11 +1,29 @@
 import { describe, expect, it } from 'vitest'
-import { countSharedDishes, normalizeCustomItems, normalizeDish, withinPublicCartLimit } from '../src/api/kitchen'
+import { countSharedDishes, kitchenViewer, mealContext, normalizeCustomItems, normalizeDish, orderPeriod, withinPublicCartLimit } from '../src/api/kitchen'
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import SharedParticipant from '../src/components/SharedParticipant.vue'
 import type { Participant } from '../src/api/kitchen'
 
 describe('public kitchen rendering', () => {
+  it('waits for the server default for first-entry links and never replaces a selected or explicit period', () => {
+    const previousViewer = kitchenViewer.value
+    const previousContext = mealContext.value
+    try {
+      kitchenViewer.value = null
+      mealContext.value = { date: '2026-11-05' }
+      expect(orderPeriod()).toBeUndefined()
+      kitchenViewer.value = { authenticated: false, displayName: '', canManage: false, today: '2026-11-05', maxDate: '2026-11-12', mealSchedule: { lunchStart: '09:30', dinnerStart: '14:30' }, defaultPeriod: 'dinner' }
+      expect(orderPeriod()).toBe('dinner')
+      mealContext.value = { ...mealContext.value, period: 'breakfast' }
+      kitchenViewer.value = { ...kitchenViewer.value, defaultPeriod: 'lunch' }
+      expect(orderPeriod()).toBe('breakfast')
+      expect(orderPeriod('dinner')).toBe('dinner')
+    } finally {
+      kitchenViewer.value = previousViewer
+      mealContext.value = previousContext
+    }
+  })
   it('reads the current dish DTO and requires boolean availability and stock fields', () => {
     const dish = { id: 1, categoryId: 2, categoryName: '家常', name: '番茄汤', imageUrl: '/tomato.png', description: '清淡', recommendationLevel: 4, isAvailable: true, soldOut: false, tags: ['午餐'] }
     expect(normalizeDish(dish)).toEqual(dish)

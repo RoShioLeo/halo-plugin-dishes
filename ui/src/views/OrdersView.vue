@@ -2,13 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { Dialog, Toast, VButton, VCard, VPageHeader } from '@halo-dev/components'
-import { getApiErrorMessage, getData, postData } from '@/api/client'
+import { deleteData, getApiErrorMessage, getData, postData } from '@/api/client'
 import { allocateKitchenQuantities, type KitchenQuantitySource } from '@/utils/kitchenAllocation'
 import RiFileList3Line from '~icons/ri/file-list-3-line'
 import RiCloseLine from '~icons/ri/close-line'
 import RiArrowLeftSLine from '~icons/ri/arrow-left-s-line'
 import RiArrowRightSLine from '~icons/ri/arrow-right-s-line'
 import RiRefreshLine from '~icons/ri/refresh-line'
+import RiDeleteBinLine from '~icons/ri/delete-bin-line'
 
 type PeriodCode = 'breakfast' | 'lunch' | 'dinner'
 type EditMode = 'requests' | 'menu'
@@ -111,8 +112,12 @@ const editors = reactive<Record<PeriodCode, Editor>>({
 const selectedDate = ref(normalizeDate(route.query.date) || chinaToday())
 const selectedPeriod = ref(normalizePeriod(route.query.period) || currentPeriod())
 const failedAvatars = reactive(new Set<string>())
+const deletingSourceId = ref('')
 const anyDirty = computed(() => PERIODS.some(({ code }) => editors[code].dirty))
-const anySaving = computed(() => PERIODS.some(({ code }) => editors[code].saving))
+const anyEditing = computed(() => PERIODS.some(({ code }) => editors[code].mode !== null))
+const anySaving = computed(
+  () => !!deletingSourceId.value || PERIODS.some(({ code }) => editors[code].saving),
+)
 const availableDishes = computed(() => catalogue.value.filter((dish) => dish.isAvailable))
 const selectedOrders = computed(() =>
   orders.value.filter((order) => order.period === selectedPeriod.value),
@@ -162,7 +167,7 @@ function currentPeriod(): PeriodCode {
       hourCycle: 'h23',
     }).format(new Date()),
   )
-  return hour < 10 ? 'breakfast' : hour < 16 ? 'lunch' : 'dinner'
+  return hour < 10 ? 'breakfast' : hour < 15 ? 'lunch' : 'dinner'
 }
 function normalizePeriod(value: unknown): PeriodCode | '' {
   return PERIODS.some((period) => period.code === value) ? (value as PeriodCode) : ''
@@ -282,9 +287,11 @@ async function loadKitchen(reset = false) {
   if (reset) loading.value = true
   else refreshing.value = true
   try {
-    const data = await getData<{ date: string; periods: KitchenPeriod[] }>(
-      '/kitchen?date=' + encodeURIComponent(date),
-    )
+    const data = await getData<{
+      date: string
+      defaultPeriod: PeriodCode
+      periods: KitchenPeriod[]
+    }>('/kitchen?date=' + encodeURIComponent(date))
     if (disposed || serial !== requestSerial || date !== selectedDate.value) return
     orders.value = PERIODS.map(
       ({ code, name }) =>
@@ -294,18 +301,13 @@ async function loadKitchen(reset = false) {
       if (reset || (!editors[order.period].mode && !editors[order.period].saving))
         applyEditor(order)
     if (!periodChosen) {
-      selectedPeriod.value =
-        orders.value.find(
-          (order) =>
-            order.participants.length &&
-            (order.needsConfirmation || order.menu.status === 'draft' || order.hasDraftChanges),
-        )?.period || selectedPeriod.value
+      selectedPeriod.value = normalizePeriod(data.defaultPeriod) || currentPeriod()
       periodChosen = true
     }
     loadError.value = ''
   } catch (error) {
     if (!disposed && serial === requestSerial)
-      loadError.value = getApiErrorMessage(error, '厨房工作台加载失败，请稍后重试')
+      loadError.value = getApiErrorMessage(error, '后厨灶台加载失败，请稍后重试')
   } finally {
     if (!disposed && serial === requestSerial) {
       loading.value = false
@@ -369,6 +371,68 @@ function cancelEdit(order: KitchenPeriod) {
 function markDirty(period: PeriodCode) {
   editors[period].dirty = true
   editors[period].error = ''
+}
+function requestDeleteSource(order: KitchenPeriod, source: DraftSource) {
+  if (!source.participantId || anyEditing.value || anySaving.value) return
+  const target = {
+    participantId: source.participantId,
+    date: selectedDate.value,
+    period: order.period,
+    stateRevision: order.stateRevision,
+  }
+  Dialog.warning({
+    title: '删除点餐记录',
+    description: '将删除“' + source.displayName + '”的菜品、其他需求和备注，并同步更新最终菜单。',
+    showCancel: true,
+    confirmType: 'danger',
+    confirmText: '删除',
+    onConfirm: async () => {
+      if (anyEditing.value || anySaving.value) {
+        Toast.warning('请先完成或取消修改')
+        return
+      }
+      const current = orders.value.find((item) => item.period === target.period)
+      if (
+        selectedDate.value !== target.date ||
+        selectedPeriod.value !== target.period ||
+        !current ||
+        current.stateRevision !== target.stateRevision
+      ) {
+        Dialog.error({ title: '删除失败', description: '点餐记录已更新，请重新确认删除。' })
+        return
+      }
+      deletingSourceId.value = source.sourceId
+      try {
+        const query = new URLSearchParams({
+          date: target.date,
+          period: target.period,
+          stateRevision: String(target.stateRevision),
+        })
+        const result = await deleteData<{ order: KitchenPeriod }>(
+          '/kitchen/participants/' +
+            encodeURIComponent(target.participantId) +
+            '?' +
+            query.toString(),
+        )
+        if (disposed || selectedDate.value !== target.date) return
+        orders.value = orders.value.map((item) =>
+          item.period === result.order.period ? result.order : item,
+        )
+        applyEditor(result.order)
+        await loadKitchen()
+        Toast.success('点餐记录已删除')
+      } catch (error) {
+        if (disposed || selectedDate.value !== target.date) return
+        await loadKitchen()
+        Dialog.error({
+          title: '删除失败',
+          description: getApiErrorMessage(error, '删除失败，请稍后重试'),
+        })
+      } finally {
+        deletingSourceId.value = ''
+      }
+    },
+  })
 }
 function isSoldOut(dishId: number | null) {
   return dishId != null && !!catalogue.value.find((dish) => dish.id === dishId)?.soldOut
@@ -704,12 +768,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <VPageHeader title="厨房工作台">
+  <VPageHeader title="后厨灶台">
     <template #icon><RiFileList3Line /></template>
     <template #actions
       ><VButton
         class="kitchen-refresh-button"
-        aria-label="刷新厨房工作台"
+        aria-label="刷新后厨灶台"
         title="刷新"
         :disabled="loading || refreshing || anySaving"
         @click="refresh"
@@ -802,6 +866,20 @@ onBeforeUnmount(() => {
                 initial(source.displayName)
               }}</span>
               <h5>{{ source.displayName }}</h5>
+              <button
+                v-if="source.participantId"
+                type="button"
+                class="kitchen-delete-source"
+                :aria-label="'删除' + source.displayName + '的点餐记录'"
+                :title="
+                  anyEditing ? '请先完成或取消修改' : '删除' + source.displayName + '的点餐记录'
+                "
+                :disabled="anyEditing || anySaving"
+                :aria-busy="deletingSourceId === source.sourceId"
+                @click="requestDeleteSource(order, source)"
+              >
+                <RiDeleteBinLine class="kitchen-action-icon" aria-hidden="true" />
+              </button>
             </div>
             <ul v-if="source.items.length" class="kitchen-request-items">
               <li v-for="item in source.items" :key="item.key" :data-item="item.key">
@@ -1097,6 +1175,33 @@ onBeforeUnmount(() => {
   font-size: 14px;
   font-weight: 500;
   overflow-wrap: anywhere;
+}
+.kitchen-delete-source {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ls-dishes-muted, #6b6b75);
+  cursor: pointer;
+}
+.kitchen-delete-source:hover:not(:disabled) {
+  color: var(--ls-dishes-danger, #b91c1c);
+  background: var(--ls-dishes-soft, #f7f7f8);
+}
+.kitchen-delete-source:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.kitchen-delete-source:focus-visible {
+  outline: 2px solid var(--ls-dishes-gold, #946d12);
+  outline-offset: 2px;
 }
 .kitchen-avatar {
   display: block;

@@ -25,10 +25,11 @@ import org.junit.jupiter.api.Test;
 class KitchenCommitTest {
     private final MemoryRepository repository = new MemoryRepository();
     private final DishesStore catalogue = mock(DishesStore.class);
+    private final com.dishes.service.DishesSettingsService settings = mock(com.dishes.service.DishesSettingsService.class);
     private final Identity a = new Identity("private-a", null, "", true, false, "");
     private final Identity b = new Identity("private-b", null, "", true, false, "");
     private final Identity chef = new Identity("private-chef", "private-chef-account", "主厨", false, true, "/chef.png");
-    private final KitchenService service = new KitchenService(repository, catalogue,
+    private final KitchenService service = new KitchenService(repository, catalogue, settings,
         Clock.fixed(Instant.parse("2026-11-05T01:00:00Z"), ZoneOffset.UTC));
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
 

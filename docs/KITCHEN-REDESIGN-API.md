@@ -1,5 +1,28 @@
 # Shared kitchen contract
 
+## Local changes awaiting the next release
+
+The chef can delete one complete source using
+`DELETE /apis/plugins/dishes/admin/kitchen/participants/{participantId}?date=YYYY-MM-DD&period=lunch&stateRevision=N`.
+Confirmation removes that record's dishes, wishes and remarks in one state CAS.
+Approved quantities are deducted from the existing published snapshot; other
+unconfirmed sources remain unconfirmed. Other people's content and menu metadata
+are preserved. Unknown records and stale revisions cause no writes. Remarks remain
+read-only, and the Console disables deletion while an adjustment is being edited.
+
+The deletion endpoint, fitted focus borders, configurable meal cutovers and 后厨灶台
+workspace naming are local-only changes;
+the published 1.1.1 version does not include them yet.
+
+`settings.basic.mealSchedule` stores `lunchStart` and `dinnerStart` as strict
+`HH:mm` values with `00:00 < lunchStart < dinnerStart < 24:00`. Missing configuration
+uses `10:00` and `15:00`. Public `/viewer` and admin `/kitchen` expose the same
+`mealSchedule` and server-computed `defaultPeriod` using the current Asia/Shanghai
+time, irrespective of the menu date being viewed. Explicit or already chosen
+meal contexts take priority over a refreshed default.
+
+## Current working model
+
 This is the new shared kitchen model. It has no migration or compatibility
 API. Quantities are nonnegative safe integers in proposals and positive integers
 in stored item rows. Zero removes an item only when its corresponding save or
@@ -8,8 +31,9 @@ submission succeeds.
 ## Public ordering
 
 - One date and meal shares one order, with per-person sources and submitted batches.
-- Dates: today through today + 7, inclusive, Asia/Shanghai. Breakfast before 10:00,
-  lunch from 10:00 through 15:59, dinner from 16:00. An explicit link/manual choice wins.
+- Dates: today through today + 7, inclusive, Asia/Shanghai. Default breakfast before 10:00,
+  lunch from 10:00 through 14:59, dinner from 15:00. The two cutover times are configurable;
+  an explicit link/manual choice wins.
 - Guests receive a remembered default nickname and can rename it; account names/avatars come from Halo. The server owns
   identity and source ownership. Opaque participant IDs reveal no guest secret.
 - Own pending selections, wishes and meal remarks save automatically. Other people's

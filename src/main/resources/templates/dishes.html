@@ -4,18 +4,18 @@
     <meta charset="UTF-8" />
     <link
       rel="icon"
-      href="/plugins/dishes/assets/dishes-frontend/lemon.svg?v=@pluginVersion@"
+      href="/plugins/lemonslice-kitchen/assets/dishes-frontend/lemon.svg?v=@pluginVersion@"
       type="image/svg+xml"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#ffffff" />
-    <script src="/plugins/dishes/assets/dishes-frontend/appearance-init.js?v=@pluginVersion@"></script>
+    <script src="/plugins/lemonslice-kitchen/assets/dishes-frontend/appearance-init.js?v=@pluginVersion@"></script>
     <meta th:if="${_csrf != null}" name="dishes-csrf-header" th:content="${_csrf.headerName}" />
     <meta th:if="${_csrf != null}" name="dishes-csrf-token" th:content="${_csrf.token}" />
     <link
       rel="stylesheet"
       crossorigin
-      href="/plugins/dishes/assets/dishes-frontend/assets/index.css?v=@pluginVersion@"
+      href="/plugins/lemonslice-kitchen/assets/dishes-frontend/assets/index.css?v=@pluginVersion@"
     />
     <title th:text="${title} ?: '柠檬私厨'">柠檬私厨</title>
   </head>
@@ -38,6 +38,6 @@
     <script th:if="${publicLogoUrl != null}">
       window.__DISHES_PUBLIC_LOGO__ = '[[${publicLogoUrl}]]';
     </script>
-    <script type="module" src="/plugins/dishes/assets/dishes-frontend/app.js?v=@pluginVersion@"></script>
+    <script type="module" src="/plugins/lemonslice-kitchen/assets/dishes-frontend/app.js?v=@pluginVersion@"></script>
   </body>
 </html>

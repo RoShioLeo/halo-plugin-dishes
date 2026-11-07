@@ -27,9 +27,10 @@ import run.halo.app.core.user.service.UserService;
 class KitchenControllerContractTest {
     private final KitchenRepository repository = mock(KitchenRepository.class);
     private final DishesStore catalogue = mock(DishesStore.class);
+    private final com.dishes.service.DishesSettingsService settings = mock(com.dishes.service.DishesSettingsService.class);
     private final UserService users = mock(UserService.class);
     private final KitchenIdentityService identities = new KitchenIdentityService(users);
-    private final KitchenService kitchen = new KitchenService(repository, catalogue,
+    private final KitchenService kitchen = new KitchenService(repository, catalogue, settings,
         Clock.fixed(Instant.parse("2026-11-05T00:00:00Z"), ZoneOffset.UTC));
     private final KitchenPublicApiController publicController = new KitchenPublicApiController(kitchen, identities,
         mock(PublicAccessService.class), mock(PublicDomainWhitelistService.class));
@@ -39,6 +40,7 @@ class KitchenControllerContractTest {
     void emptyKitchen() {
         when(repository.load(any(), any())).thenAnswer(ignored -> new KitchenState(null, false, new ArrayList<>(), null));
         when(catalogue.listDishes(any())).thenReturn(List.of());
+        when(settings.mealSchedule()).thenReturn(com.dishes.domain.service.MealSchedule.DEFAULT);
     }
 
     @Test
@@ -60,6 +62,8 @@ class KitchenControllerContractTest {
                 "stateRevision", 0, "batchId", "initial", "mode", "menu",
                 "contributionVersions", Map.of(), "items", List.of(), "note", ""))
             .exchange().expectStatus().isForbidden();
+        client.delete().uri("/apis/plugins/dishes/admin/kitchen/participants/unknown?date=2026-11-05&period=lunch&stateRevision=0")
+            .exchange().expectStatus().isForbidden().expectBody().jsonPath("$.code").isEqualTo("DISHES_CHEF_REQUIRED");
         verify(repository, never()).saveState(any());
     }
 
@@ -81,6 +85,8 @@ class KitchenControllerContractTest {
                 "date", "2026-11-05", "period", "lunch", "revision", 0, "stateRevision", 0,
                 "batchId", "initial", "contributionVersions", Map.of(), "mode", "menu", "items", List.of(), "note", ""))
             .exchange().expectStatus().isOk().expectBody().jsonPath("$.ok").isEqualTo(true);
+        client.delete().uri("/apis/plugins/dishes/admin/kitchen/participants/unknown?date=2026-11-05&period=lunch&stateRevision=0")
+            .exchange().expectStatus().isNotFound().expectBody().jsonPath("$.code").isEqualTo("DISHES_NOT_FOUND");
         verify(repository).saveState(any());
     }
 }

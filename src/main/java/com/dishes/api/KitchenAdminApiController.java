@@ -25,4 +25,10 @@ public class KitchenAdminApiController extends ApiExceptionHandler {
     public Envelope<Map<String, Object>> commit(@RequestBody CommitInput input, Principal principal, ServerWebExchange exchange) {
         return Envelope.ok(kitchen.commit(input, identities.resolve(principal, exchange)));
     }
+    @DeleteMapping("/kitchen/participants/{participantId}")
+    public Envelope<Map<String, Object>> deleteParticipant(@PathVariable("participantId") String participantId,
+            @RequestParam(name = "date") String date, @RequestParam(name = "period") String period,
+            @RequestParam(name = "stateRevision") long stateRevision, Principal principal, ServerWebExchange exchange) {
+        return Envelope.ok(kitchen.deleteParticipant(date, period, participantId, stateRevision, identities.resolve(principal, exchange)));
+    }
 }

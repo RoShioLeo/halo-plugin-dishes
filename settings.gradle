@@ -3,6 +3,6 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
-rootProject.name = 'plugin-dishes'
+rootProject.name = 'lemonslice-kitchen'
 include 'ui'
 include 'web-frontend'

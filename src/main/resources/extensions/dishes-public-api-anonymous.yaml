@@ -2,14 +2,14 @@
 apiVersion: v1alpha1
 kind: Role
 metadata:
-  name: dishes-role-public-api-anonymous
+  name: lemonslice-kitchen-role-public-api-anonymous
   labels:
     halo.run/role-template: "true"
     rbac.authorization.halo.run/aggregate-to-anonymous: "true"
     halo.run/hidden: "true"
   annotations:
     rbac.authorization.halo.run/aggregate-to-anonymous: "true"
-    rbac.authorization.halo.run/module: "Dishes"
+    rbac.authorization.halo.run/module: "LemonSlice Kitchen"
     rbac.authorization.halo.run/display-name: "家庭私厨公共 API（匿名）"
 rules:
   - nonResourceURLs:

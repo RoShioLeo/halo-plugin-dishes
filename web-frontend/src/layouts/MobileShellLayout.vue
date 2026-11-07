@@ -3,10 +3,10 @@ import KitchenIcon from '@/components/KitchenIcon.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import AppearanceControl from '@/components/AppearanceControl.vue'
-import { kitchenViewer, loadViewer, mealContext } from '@/api/kitchen'
+import { kitchenViewer, loadViewer, mealContext, orderPeriod } from '@/api/kitchen'
 const route = useRoute()
 const homeLink = computed(() => ({ path: '/', query: { date: mealContext.value.date } }))
-const orderLink = computed(() => ({ path: '/order', query: { ...mealContext.value } }))
+const orderLink = computed(() => ({ path: '/order', query: { date: mealContext.value.date, period: orderPeriod(route.query.period) } }))
 const header = ref<HTMLElement | null>(null)
 const menuToggle = ref<HTMLButtonElement | null>(null)
 const navOpen = ref(false)
@@ -32,7 +32,7 @@ onUnmounted(() => { document.removeEventListener('click', outside); document.rem
       <nav id="kitchen-navigation" class="ls-site-links" :class="navOpen ? 'is-open' : ''" aria-label="主导航">
         <RouterLink :to="homeLink" :aria-current="route.name === 'home' ? 'page' : undefined" @click="closeNav()">当日菜单</RouterLink>
         <RouterLink :to="orderLink" :aria-current="route.name === 'order' ? 'page' : undefined" @click="closeNav()">看看吃啥</RouterLink>
-        <a v-if="kitchenViewer?.canManage" href="/console/dishes/orders" @click="closeNav()">厨房工作台</a>
+        <a v-if="kitchenViewer?.canManage" href="/console/dishes/orders" @click="closeNav()">后厨灶台</a>
       </nav>
       <div class="ls-site-tools"><AppearanceControl /><button ref="menuToggle" type="button" class="ls-mobile-menu" :aria-expanded="navOpen" aria-controls="kitchen-navigation" :aria-label="navOpen ? '收起导航' : '展开导航'" @click="toggleNav"><KitchenIcon name="menu-line" /></button></div>
     </header>

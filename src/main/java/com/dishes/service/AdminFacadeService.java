@@ -2,6 +2,7 @@ package com.dishes.service;
 
 import com.dishes.service.admin.AdminMenuService;
 import com.dishes.service.admin.AdminSettingsService;
+import com.dishes.domain.service.MealSchedule;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -106,7 +107,8 @@ public class AdminFacadeService {
         String publicSiteTitle,
         String publicBrandTitle,
         String publicBrandSubtitle,
-        String publicDomainWhitelist
+        String publicDomainWhitelist,
+        MealSchedule mealSchedule
     ) {
         return adminSettingsService.updateSettings(
             accessMode,
@@ -116,7 +118,8 @@ public class AdminFacadeService {
             publicSiteTitle,
             publicBrandTitle,
             publicBrandSubtitle,
-            publicDomainWhitelist
+            publicDomainWhitelist,
+            mealSchedule
         );
     }
 }

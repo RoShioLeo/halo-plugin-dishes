@@ -44,10 +44,10 @@ export default definePlugin({
             name: 'DishesOrders',
             component: () => import(/* webpackChunkName: "OrdersView" */ './views/OrdersView.vue'),
             meta: {
-              title: '厨房工作台',
+              title: '后厨灶台',
               searchable: true,
               menu: {
-                name: '厨房工作台',
+                name: '后厨灶台',
                 icon: markRaw(RiFileList3Line),
                 priority: 1,
               },

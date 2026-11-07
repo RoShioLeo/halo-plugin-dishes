@@ -1,6 +1,7 @@
 package com.dishes.api;
 
 import com.dishes.service.AdminFacadeService;
+import com.dishes.domain.service.MealSchedule;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.MediaType;
@@ -94,7 +95,8 @@ public class AdminApiController extends ApiExceptionHandler {
             basic.publicSiteTitle(),
             basic.publicBrandTitle(),
             basic.publicBrandSubtitle(),
-            basic.publicDomainWhitelist()
+            basic.publicDomainWhitelist(),
+            basic.mealSchedule()
         ));
     }
 
@@ -131,7 +133,8 @@ public class AdminApiController extends ApiExceptionHandler {
         String publicSiteTitle,
         String publicBrandTitle,
         String publicBrandSubtitle,
-        String publicDomainWhitelist
+        String publicDomainWhitelist,
+        MealSchedule mealSchedule
     ) {}
 
 }

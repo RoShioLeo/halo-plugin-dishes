@@ -1,7 +1,10 @@
 import { ref } from 'vue'
 import { apiGet } from '@/api/http'
+import { isPeriod, mealPeriodAt, preferredMealPeriod } from '@/utils/mealSchedule'
+import type { MealSchedule, PeriodCode } from '@/utils/mealSchedule'
 
-export type PeriodCode = 'breakfast' | 'lunch' | 'dinner'
+export { isPeriod } from '@/utils/mealSchedule'
+export type { MealSchedule, PeriodCode } from '@/utils/mealSchedule'
 export const mealPeriods: { code: PeriodCode; name: string }[] = [
   { code: 'breakfast', name: '早餐' },
   { code: 'lunch', name: '午餐' },
@@ -13,6 +16,8 @@ export interface Viewer {
   canManage: boolean
   today: string
   maxDate: string
+  mealSchedule: MealSchedule
+  defaultPeriod: PeriodCode
 }
 export interface Dish {
   id: number
@@ -104,18 +109,18 @@ export function shanghaiToday(): string {
   return `${part('year')}-${part('month')}-${part('day')}`
 }
 export function defaultPeriod(): PeriodCode {
-  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', hourCycle: 'h23' }).format(new Date()))
-  return hour < 10 ? 'breakfast' : hour < 16 ? 'lunch' : 'dinner'
-}
-export function isPeriod(value: unknown): value is PeriodCode {
-  return value === 'breakfast' || value === 'lunch' || value === 'dinner'
+  const viewer = kitchenViewer.value
+  return isPeriod(viewer?.defaultPeriod) ? viewer.defaultPeriod : mealPeriodAt(new Date(), viewer?.mealSchedule)
 }
 export function isDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
   const date = new Date(`${value}T00:00:00Z`)
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
 }
-export const mealContext = ref({ date: shanghaiToday(), period: defaultPeriod() })
+export const mealContext = ref<{ date: string; period?: PeriodCode }>({ date: shanghaiToday() })
+export function orderPeriod(explicit?: unknown): PeriodCode | undefined {
+  return preferredMealPeriod(explicit, mealContext.value.period) ?? (kitchenViewer.value ? defaultPeriod() : undefined)
+}
 export function periodName(code: PeriodCode): string {
   return mealPeriods.find((item) => item.code === code)?.name ?? '午餐'
 }

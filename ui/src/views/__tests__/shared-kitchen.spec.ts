@@ -101,6 +101,7 @@ function fixture() {
   }
   return {
     date: '2026-11-05',
+    defaultPeriod: 'lunch',
     periods: [
       {
         date: '2026-11-05',
@@ -206,6 +207,7 @@ function batchFixture() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.delete.mockReset()
   mocks.put.mockResolvedValue({})
   kitchen = fixture()
   mocks.route.query = { date: '2026-11-05' }
@@ -240,6 +242,7 @@ afterEach(() => {
   wrapper = undefined
   document.body.innerHTML = ''
   vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 
 async function editMenu() {
@@ -279,6 +282,136 @@ function threeSources(chefFirst = false) {
 }
 
 describe('atomic shared kitchen draft', () => {
+  it('uses the server default instead of pending meals and keeps the chosen context on refresh', async () => {
+    kitchen.defaultPeriod = 'dinner'
+    wrapper = mount(OrdersView)
+    await flushPromises()
+    const period = wrapper.get<HTMLSelectElement>('select[aria-label="餐次"]')
+    expect(period.element.value).toBe('dinner')
+    expect(wrapper.get('[data-period]').attributes('data-period')).toBe('dinner')
+    kitchen.defaultPeriod = 'breakfast'
+    await refreshOnFocus()
+    expect(period.element.value).toBe('dinner')
+    await period.setValue('lunch')
+    await refreshOnFocus()
+    expect(period.element.value).toBe('lunch')
+  })
+
+  it('keeps an explicit URL meal ahead of the configured server default', async () => {
+    kitchen.defaultPeriod = 'dinner'
+    mocks.route.query = { date: '2026-11-05', period: 'breakfast' }
+    wrapper = mount(OrdersView)
+    await flushPromises()
+    expect(wrapper.get<HTMLSelectElement>('select[aria-label="餐次"]').element.value).toBe(
+      'breakfast',
+    )
+    kitchen.defaultPeriod = 'lunch'
+    await refreshOnFocus()
+    expect(wrapper.get<HTMLSelectElement>('select[aria-label="餐次"]').element.value).toBe(
+      'breakfast',
+    )
+  })
+
+  it('uses the 15:00 Shanghai fallback before the server default is loaded', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-05T07:00:00Z'))
+    let finish!: (value: ReturnType<typeof fixture>) => void
+    mocks.get.mockImplementation((path: string) =>
+      path.startsWith('/kitchen')
+        ? new Promise((resolve) => {
+            finish = resolve
+          })
+        : Promise.resolve({ items: [] }),
+    )
+    wrapper = mount(OrdersView)
+    const period = wrapper.get<HTMLSelectElement>('select[aria-label="餐次"]')
+    expect(period.element.value).toBe('dinner')
+    finish(clone(kitchen))
+    await flushPromises()
+    expect(period.element.value).toBe('lunch')
+  })
+
+  it('deletes one person only after confirmation using the frozen meal revision and refreshes both sides', async () => {
+    kitchen.periods[0]!.menu.status = 'confirmed'
+    const lunch = await openKitchen()
+    const records = lunch.get('[data-kitchen-requests]')
+    expect(records.findAll('textarea')).toHaveLength(0)
+    expect(records.text()).toContain('想吃水果')
+    expect(records.text()).toContain('不要葱')
+    await source('person-a').get('button[aria-label="删除小明的点餐记录"]').trigger('click')
+    const confirmation = vi.mocked(Dialog.warning).mock.calls.at(-1)?.[0]
+    expect(confirmation).toEqual(
+      expect.objectContaining({
+        title: '删除点餐记录',
+        showCancel: true,
+        confirmType: 'danger',
+        description: expect.stringContaining('菜品、其他需求和备注'),
+      }),
+    )
+    expect(mocks.delete).not.toHaveBeenCalled()
+    expect(source('person-a').text()).toContain('不要葱')
+    const next = clone(kitchen.periods[0]!)
+    next.participants = []
+    next.workingItems = []
+    next.menu.items = []
+    next.stateRevision = 2
+    next.needsConfirmation = false
+    next.hasDraftChanges = false
+    mocks.delete.mockImplementationOnce(async () => {
+      kitchen.periods[0] = next
+      return { order: clone(next) }
+    })
+    await confirmation?.onConfirm?.()
+    await flushPromises()
+    expect(mocks.delete).toHaveBeenCalledTimes(1)
+    expect(mocks.delete).toHaveBeenCalledWith(
+      '/kitchen/participants/person-a?date=2026-11-05&period=lunch&stateRevision=1',
+    )
+    expect(lunch.find('[data-source="person-a"]').exists()).toBe(false)
+    expect(lunch.findAll('[data-menu-item]')).toHaveLength(0)
+    expect(lunch.text()).not.toContain('不要葱')
+    expect(mocks.post).not.toHaveBeenCalled()
+  })
+
+  it('blocks deletion while a draft is edited and rechecks a pending confirmation without losing inputs', async () => {
+    const lunch = await openKitchen()
+    const remove = source('person-a').get('button[aria-label="删除小明的点餐记录"]')
+    await remove.trigger('click')
+    const confirmation = vi.mocked(Dialog.warning).mock.calls.at(-1)?.[0]
+    await button(lunch, '调整菜单').trigger('click')
+    await lunch.get('input[aria-label="番茄汤份数"]').setValue(8)
+    expect(remove.attributes('disabled')).toBeDefined()
+    expect(source('__chef__').find('.kitchen-delete-source').exists()).toBe(false)
+    await confirmation?.onConfirm?.()
+    await flushPromises()
+    expect(mocks.delete).not.toHaveBeenCalled()
+    expect(lunch.get<HTMLInputElement>('input[aria-label="番茄汤份数"]').element.value).toBe('8')
+    expect(lunch.get('[data-kitchen-requests]').findAll('textarea')).toHaveLength(0)
+    expect(source('person-a').text()).toContain('想吃水果')
+    expect(source('person-a').text()).toContain('不要葱')
+  })
+
+  it('reports a stale delete failure and reloads the source without clearing anyone notes', async () => {
+    const lunch = await openKitchen()
+    await source('person-a').get('.kitchen-delete-source').trigger('click')
+    mocks.delete.mockImplementationOnce(async () => {
+      kitchen.periods[0]!.stateRevision = 2
+      kitchen.periods[0]!.participants[0]!.items[0]!.quantity = 3
+      kitchen.periods[0]!.workingItems[0]!.quantity = 3
+      throw new Error('点餐已更新，请重新确认删除')
+    })
+    await vi.mocked(Dialog.warning).mock.calls.at(-1)?.[0]?.onConfirm?.()
+    await flushPromises()
+    expect(mocks.delete).toHaveBeenCalledTimes(1)
+    expect(Dialog.error).toHaveBeenCalledWith(
+      expect.objectContaining({ description: '点餐已更新，请重新确认删除' }),
+    )
+    expect(sourceRow('person-a', 'dish:1').text()).toContain('3 份')
+    expect(source('person-a').text()).toContain('不要葱')
+    expect(lunch.get('[data-kitchen-requests]').findAll('textarea')).toHaveLength(0)
+    expect(mocks.post).not.toHaveBeenCalled()
+  })
+
   it('marks newly submitted changes as pending once and clears the tag after confirmation', async () => {
     kitchen.periods[0]!.menu.status = 'confirmed'
     kitchen.periods[0]!.needsConfirmation = false

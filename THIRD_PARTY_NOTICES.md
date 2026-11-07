@@ -21,8 +21,8 @@ The installed Vue runtime packages listed above carry identical complete license
 The Remix Icon paths used here are `file-list-3-line`, `restaurant-2-line`,
 `settings-3-line`, `refresh-line`, `share-line`, `close-line`, `search-line`,
 `edit-line`, `add-line`, `subtract-line`, `arrow-left-s-line`,
-`arrow-right-s-line`, `group-line`, `send-plane-line`, `menu-line`, and
-`check-line`. The build and local
+`arrow-right-s-line`, `group-line`, `send-plane-line`, `menu-line`,
+`check-line`, and `delete-bin-line`. The build and local
 Vue icon component wrap the original static path data without changing it. The
 pinned icon set declares Apache-2.0 in its installed `info.json` and `package.json`;
 the full text is copied from the matching upstream v4.8.0 `License` file.

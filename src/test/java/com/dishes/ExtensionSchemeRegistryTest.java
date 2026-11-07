@@ -1,6 +1,7 @@
 package com.dishes;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 import com.dishes.extension.Dish;
 import com.dishes.extension.DishCategory;
@@ -28,7 +29,7 @@ class ExtensionSchemeRegistryTest {
         manager.register(OtherClassloaderDish.class);
         var old = manager.get(Dish.class);
 
-        new ExtensionSchemeRegistry(manager).ensureRegistered();
+        registry(manager).ensureRegistered();
 
         assertSame(Dish.class, manager.get(Dish.class).type());
         assertTrue(manager.removals.contains(old));
@@ -39,7 +40,7 @@ class ExtensionSchemeRegistryTest {
     @Test
     void retainsCurrentClassRegistrationsOnRepeatedReads() {
         var manager = new TrackingSchemeManager();
-        var registry = new ExtensionSchemeRegistry(manager);
+        var registry = registry(manager);
         registry.ensureRegistered();
         manager.registrations.clear();
 
@@ -53,7 +54,7 @@ class ExtensionSchemeRegistryTest {
     @Test
     void stopCleanupRemovesOnlySchemesOwnedByCurrentClassIdentities() {
         var manager = new TrackingSchemeManager();
-        var registry = new ExtensionSchemeRegistry(manager);
+        var registry = registry(manager);
         registry.ensureRegistered();
         manager.unregister(manager.get(DishCategory.class));
         manager.register(OtherInstanceCategory.class);
@@ -70,7 +71,7 @@ class ExtensionSchemeRegistryTest {
     @Test
     void pluginStopDelegatesRegistrationCleanupWithoutDeletingBusinessExtensions() {
         var manager = new TrackingSchemeManager();
-        var registry = new ExtensionSchemeRegistry(manager);
+        var registry = registry(manager);
         registry.ensureRegistered();
         var businessCalls = new AtomicInteger();
         var client = (ReactiveExtensionClient) Proxy.newProxyInstance(
@@ -95,7 +96,7 @@ class ExtensionSchemeRegistryTest {
         manager.failUnregister = true;
 
         assertThrows(IllegalStateException.class,
-            () -> new ExtensionSchemeRegistry(manager).ensureRegistered());
+            () -> registry(manager).ensureRegistered());
         assertSame(OtherClassloaderDish.class, manager.get(Dish.class).type());
         assertFalse(manager.registrations.contains(Dish.class));
     }
@@ -107,6 +108,27 @@ class ExtensionSchemeRegistryTest {
     @GVK(group = "dishes.plugin.halo.run", version = "v1alpha1", kind = "DishCategory",
         plural = "dishcategories", singular = "dishcategory")
     static class OtherInstanceCategory extends AbstractExtension {}
+
+    @Test
+    void activationRefusalDoesNotReplaceOrRebuildExistingRegistrations() {
+        var manager = new TrackingSchemeManager();
+        manager.register(OtherClassloaderDish.class);
+        var old = manager.get(Dish.class);
+        var guard = mock(PluginActivationGuard.class);
+        doThrow(new IllegalStateException("old plugin remains active")).when(guard).ensureExclusive();
+        var registry = new ExtensionSchemeRegistry(manager, guard);
+
+        assertThrows(IllegalStateException.class, registry::ensureRegistered);
+        assertThrows(IllegalStateException.class, registry::rebuildAll);
+
+        assertSame(old, manager.get(Dish.class));
+        assertTrue(manager.removals.isEmpty());
+        assertEquals(List.of(OtherClassloaderDish.class), manager.registrations);
+    }
+
+    private ExtensionSchemeRegistry registry(TrackingSchemeManager manager) {
+        return new ExtensionSchemeRegistry(manager, mock(PluginActivationGuard.class));
+    }
 
     private static class TrackingSchemeManager implements SchemeManager {
         private final List<Scheme> values = new ArrayList<>();

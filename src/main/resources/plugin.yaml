@@ -3,19 +3,19 @@ apiVersion: plugin.halo.run/v1alpha1
 kind: Plugin
 metadata:
 
-  name: dishes
+  name: lemonslice-kitchen
 spec:
   enabled: true
   requires: ">=2.23.0"
   author:
-    name: bai
-    website: https://avrinbai.cn
+    name: RoShioLeo
+    website: https://blog.lemonslice.cloud
   logo: logo.svg
   homepage: https://github.com/RoShioLeo/halo-plugin-dishes#readme
   repo: https://github.com/RoShioLeo/halo-plugin-dishes
   issues: https://github.com/RoShioLeo/halo-plugin-dishes/issues
   displayName: "柠檬私厨"
-  description: "LemonSlice 风格的家庭点菜插件，基于 bai 的 Halo Dishes 改造"
+  description: "LemonSlice 自维护的家庭私厨插件，支持多人点餐、预约与主厨菜单管理"
   license:
     - name: "GPL-3.0"
       url: "https://github.com/RoShioLeo/halo-plugin-dishes/blob/main/LICENSE"

@@ -2,6 +2,7 @@ package com.dishes.service;
 
 import com.dishes.ExtensionSchemeRegistry;
 import com.dishes.extension.DishesSettings;
+import com.dishes.domain.service.MealSchedule;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.function.Supplier;
@@ -85,6 +86,10 @@ public class DishesSettingsService {
         }
     }
 
+    public MealSchedule mealSchedule() {
+        return MealSchedule.normalize(getOrInitSettings().getSpec().getMealSchedule());
+    }
+
     public String normalizeAccessMode(String mode) {
         return "password".equals(mode) ? mode : "none";
     }
@@ -158,6 +163,7 @@ public class DishesSettingsService {
         spec.setPublicBrandTitle("");
         spec.setPublicBrandSubtitle("");
         spec.setPublicDomainWhitelist("");
+        spec.setMealSchedule(MealSchedule.DEFAULT);
         return spec;
     }
 }

@@ -2,6 +2,7 @@ package com.dishes.service.admin;
 
 import com.dishes.SiteRouter;
 import com.dishes.extension.DishesSettings;
+import com.dishes.domain.service.MealSchedule;
 import com.dishes.service.DishesSettingsService;
 import com.dishes.service.dto.ApiPayloads;
 import java.util.Map;
@@ -31,8 +32,10 @@ public class AdminSettingsService {
         String publicSiteTitle,
         String publicBrandTitle,
         String publicBrandSubtitle,
-        String publicDomainWhitelist
+        String publicDomainWhitelist,
+        MealSchedule mealSchedule
     ) {
+        var schedule = MealSchedule.normalize(mealSchedule);
         var ext = settingsService.getOrInitSettings();
         var spec = ext.getSpec();
         spec.setAccessMode(settingsService.normalizeAccessMode(accessMode));
@@ -43,6 +46,7 @@ public class AdminSettingsService {
         spec.setPublicBrandTitle(settingsService.normalizePublicText(publicBrandTitle, 60));
         spec.setPublicBrandSubtitle(settingsService.normalizePublicText(publicBrandSubtitle, 400));
         spec.setPublicDomainWhitelist(settingsService.normalizeDomainWhitelist(publicDomainWhitelist));
+        spec.setMealSchedule(schedule);
         syncSiteRouterCache(spec);
         ext.setSpec(spec);
         settingsService.saveSettings(ext);

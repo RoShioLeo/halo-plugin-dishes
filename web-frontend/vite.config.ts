@@ -4,7 +4,7 @@ import vue from '@vitejs/plugin-vue'
 import { defineConfig, loadEnv } from 'vite'
 
 /** 与 Halo 插件静态资源路径一致（见 templates/dishes.html、ReverseProxy） */
-const PLUGIN_ASSET_BASE = '/plugins/dishes/assets/dishes-frontend/'
+const PLUGIN_ASSET_BASE = '/plugins/lemonslice-kitchen/assets/dishes-frontend/'
 const STANDALONE_ASSET_BASE = '/'
 
 function normalizeAssetBase(raw: string | undefined): string {

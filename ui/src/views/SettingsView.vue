@@ -6,6 +6,8 @@ import { getApiErrorMessage, getData, putData } from '@/api/client'
 import RiSettings3Line from '~icons/ri/settings-3-line'
 
 type AccessMode = 'none' | 'password'
+type MealSchedule = { lunchStart: string; dinnerStart: string }
+const DEFAULT_MEAL_SCHEDULE: MealSchedule = { lunchStart: '10:00', dinnerStart: '15:00' }
 
 type SettingsResp = {
   basic: {
@@ -22,6 +24,7 @@ type SettingsResp = {
     publicBrandSubtitle: string
     publicDomainWhitelist: string
     defaultPublicAccessUrl: string
+    mealSchedule: MealSchedule
   }
 }
 
@@ -29,6 +32,7 @@ const loading = ref(true)
 const saving = ref(false)
 const activeTab = ref<'basic' | 'security'>('basic')
 const logoAttachmentModalOpen = ref(false)
+const mealScheduleError = ref('')
 
 const form = reactive<SettingsResp>({
   basic: {
@@ -42,6 +46,7 @@ const form = reactive<SettingsResp>({
     publicBrandSubtitle: '',
     publicDomainWhitelist: '',
     defaultPublicAccessUrl: '/dishes',
+    mealSchedule: { ...DEFAULT_MEAL_SCHEDULE },
   },
 })
 
@@ -55,6 +60,39 @@ const accessModeOptions: Array<{ value: AccessMode; label: string; desc: string 
 ]
 
 const needPasswordInput = computed(() => form.basic.accessMode === 'password')
+function timeMinutes(value: string) {
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return null
+  const [hour, minute] = value.split(':').map(Number)
+  return hour! * 60 + minute!
+}
+function validateMealSchedule() {
+  const lunch = timeMinutes(form.basic.mealSchedule.lunchStart)
+  const dinner = timeMinutes(form.basic.mealSchedule.dinnerStart)
+  if (lunch === null || dinner === null) return '请选择精确到分钟的有效开始时间'
+  if (lunch <= 0 || lunch >= dinner) return '开始时间须满足 00:00 < 午餐 < 晚餐 < 24:00'
+  return ''
+}
+function clockLabel(minutes: number) {
+  return (
+    String(Math.floor(minutes / 60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0')
+  )
+}
+const mealScheduleSummary = computed(() => {
+  if (validateMealSchedule()) return ''
+  const lunch = timeMinutes(form.basic.mealSchedule.lunchStart)!
+  const dinner = timeMinutes(form.basic.mealSchedule.dinnerStart)!
+  return (
+    '早餐 00:00–' +
+    clockLabel(lunch - 1) +
+    '；午餐 ' +
+    form.basic.mealSchedule.lunchStart +
+    '–' +
+    clockLabel(dinner - 1) +
+    '；晚餐 ' +
+    form.basic.mealSchedule.dinnerStart +
+    '–23:59（上海时间）'
+  )
+})
 const logoPreviewUrl = computed(() => {
   const raw = (form.basic.publicLogoUrl || '').trim()
   if (!raw) return ''
@@ -104,6 +142,7 @@ function onLogoAttachmentSelect(attachments: AttachmentLike[]) {
 
 async function load() {
   loading.value = true
+  mealScheduleError.value = ''
   try {
     const data = await getData<SettingsResp>('/settings')
     form.basic.accessMode = data.basic?.accessMode ?? 'none'
@@ -116,6 +155,7 @@ async function load() {
     form.basic.publicBrandTitle = data.basic?.publicBrandTitle ?? ''
     form.basic.publicBrandSubtitle = data.basic?.publicBrandSubtitle ?? ''
     form.basic.publicDomainWhitelist = data.basic?.publicDomainWhitelist ?? ''
+    form.basic.mealSchedule = { ...(data.basic?.mealSchedule ?? DEFAULT_MEAL_SCHEDULE) }
   } catch (e) {
     Dialog.error({
       title: '加载失败',
@@ -129,6 +169,11 @@ async function load() {
 }
 
 async function save() {
+  mealScheduleError.value = validateMealSchedule()
+  if (mealScheduleError.value) {
+    activeTab.value = 'basic'
+    return
+  }
   if (needPasswordInput.value && !form.basic.accessPassword.trim()) {
     Dialog.warning({ title: '提示', description: '密码访问模式下请先填写前台访问密码。' })
     return
@@ -145,6 +190,7 @@ async function save() {
         publicBrandTitle: form.basic.publicBrandTitle,
         publicBrandSubtitle: form.basic.publicBrandSubtitle,
         publicDomainWhitelist: form.basic.publicDomainWhitelist,
+        mealSchedule: { ...form.basic.mealSchedule },
       },
     })
     Toast.success('设置已保存')
@@ -247,9 +293,7 @@ onMounted(() => {
                 maxlength="80"
                 placeholder="柠檬私厨"
               />
-              <p class="settings-hint">
-                留空使用「柠檬私厨」。标题示例：当日菜单 - 柠檬私厨。
-              </p>
+              <p class="settings-hint">留空使用「柠檬私厨」。标题示例：当日菜单 - 柠檬私厨。</p>
             </div>
 
             <div class="settings-field">
@@ -277,6 +321,44 @@ onMounted(() => {
                 留空则使用默认「今天，想吃点什么？」（最多 400 字，保存时服务端会截断）。
               </p>
             </div>
+
+            <h3 class="settings-title">默认餐次</h3>
+            <div class="settings-schedule-fields">
+              <label class="settings-field">
+                <span class="settings-field-label">午餐开始</span>
+                <input
+                  v-model="form.basic.mealSchedule.lunchStart"
+                  type="time"
+                  min="00:01"
+                  max="23:58"
+                  step="60"
+                  class="settings-input"
+                  aria-label="午餐开始"
+                  :aria-invalid="!!mealScheduleError"
+                  :disabled="saving"
+                  @input="mealScheduleError = ''"
+                />
+              </label>
+              <label class="settings-field">
+                <span class="settings-field-label">晚餐开始</span>
+                <input
+                  v-model="form.basic.mealSchedule.dinnerStart"
+                  type="time"
+                  min="00:02"
+                  max="23:59"
+                  step="60"
+                  class="settings-input"
+                  aria-label="晚餐开始"
+                  :aria-invalid="!!mealScheduleError"
+                  :disabled="saving"
+                  @input="mealScheduleError = ''"
+                />
+              </label>
+            </div>
+            <p v-if="mealScheduleError" class="settings-schedule-error" role="alert">
+              {{ mealScheduleError }}
+            </p>
+            <p v-else-if="mealScheduleSummary" class="settings-hint">{{ mealScheduleSummary }}</p>
           </div>
 
           <div v-show="activeTab === 'security'" class="settings-section">
@@ -350,6 +432,19 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.settings-schedule-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.settings-schedule-fields .settings-input {
+  width: 144px;
+}
+.settings-schedule-error {
+  margin: 0;
+  color: var(--ls-dishes-danger, #b91c1c);
+  font-size: 13px;
+}
 .settings-card {
   box-shadow: none;
 }
