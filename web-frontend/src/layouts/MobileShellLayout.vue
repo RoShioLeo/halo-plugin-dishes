@@ -28,7 +28,7 @@ onUnmounted(() => { document.removeEventListener('click', outside); document.rem
 <template>
   <div class="ls-shell">
     <header ref="header" class="ls-site-nav">
-      <a class="ls-back-blog" href="https://blog.lemonslice.cloud/"><KitchenIcon name="arrow-left-s-line" /><span>主站</span></a>
+      <a class="ls-back-blog" href="/"><KitchenIcon name="arrow-left-s-line" /><span>主站</span></a>
       <nav id="kitchen-navigation" class="ls-site-links" :class="navOpen ? 'is-open' : ''" aria-label="主导航">
         <RouterLink :to="homeLink" :aria-current="route.name === 'home' ? 'page' : undefined" @click="closeNav()">当日菜单</RouterLink>
         <RouterLink :to="orderLink" :aria-current="route.name === 'order' ? 'page' : undefined" @click="closeNav()">看看吃啥</RouterLink>

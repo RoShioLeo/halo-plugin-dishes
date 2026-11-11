@@ -5,8 +5,8 @@ This is a modified version of **Halo Dishes**, originally by **bai**.
 - Original project: https://github.com/Avrinbai/halo-plugin-dishes
 - Original author: bai, https://avrinbai.cn
 - Upstream baseline: `ddb7a9f524323bf7efd3da90d056af369d04f071` (version 1.0.3).
-- Modified and maintained by: RoShioLeo for LemonSlice Cloud, **2026-11-05 to 2026-11-08**.
-- Modified version: **1.2.0**, plugin ID **lemonslice-kitchen**.
+- Modified and maintained by: RoShioLeo for LemonSlice Cloud, **2026-11-05 to 2026-11-12**.
+- Modified version: **1.2.1**, plugin ID **lemonslice-kitchen**.
 - Source repository, including build files and dependency lockfiles (release tags accompany published releases):
   https://github.com/RoShioLeo/halo-plugin-dishes
 

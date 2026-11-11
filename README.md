@@ -5,7 +5,7 @@
 </div>
 
 由 **RoShioLeo** 为 LemonSlice Cloud 维护的共享点餐与后厨菜单插件。
-当前源码版本为 **1.2.0**，插件 ID 为 **`lemonslice-kitchen`**。
+当前源码版本为 **1.2.1**，插件 ID 为 **`lemonslice-kitchen`**。
 项目采用 **GPL-3.0**；上游来源、版权与改造说明见文末及 [NOTICE.md](./NOTICE.md)。
 
 ## 共享厨房
@@ -47,7 +47,7 @@
 
 要求 **Halo >= 2.23.0**，运行环境使用对应 Halo 支持的 Java 版本。
 
-1. 从 [Releases](https://github.com/RoShioLeo/halo-plugin-dishes/releases) 下载对应版本的 JAR，或按下方步骤构建。当前源码版本为 `1.2.0`。
+1. 从 [Releases](https://github.com/RoShioLeo/halo-plugin-dishes/releases) 下载对应版本的 JAR，或按下方步骤构建。当前源码版本为 `1.2.1`。
 2. 在 Halo 后台「插件」上传并启用“柠檬私厨”；已安装同 ID 插件时使用升级操作。
 3. 在「菜品管理」创建分类、菜品和标签，在「插件设置」调整图标、文案、访问模式等。
 4. 默认前台地址为 `/dishes`；超级管理员通过「后厨灶台」查看点菜并确认菜单。
@@ -72,7 +72,7 @@ corepack prepare pnpm@10.12.4 --activate
 ```
 
 Windows 使用 `gradlew.bat --no-daemon clean build`。
-产物：`build/libs/lemonslice-kitchen-1.2.0.jar`。
+产物：`build/libs/lemonslice-kitchen-1.2.1.jar`。
 
 Gradle 构建同时执行 Java 测试、Console 的 Vitest 交互测试、公开前台的 Node 测试，
 以及两个前端的 TypeScript 检查和 Vite 打包。

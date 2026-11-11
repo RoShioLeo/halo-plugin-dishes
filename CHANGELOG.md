@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1 — 2026-11-12
+
+- Return to the current host's homepage from the kitchen and point the author website to `www.lemonslice.cloud`.
+
 ## 1.2.0 — 2026-11-08
 
 - Adopt the independent `lemonslice-kitchen` plugin ID and plain semantic versioning.

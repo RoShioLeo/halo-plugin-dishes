@@ -9,7 +9,7 @@ spec:
   requires: ">=2.23.0"
   author:
     name: RoShioLeo
-    website: https://blog.lemonslice.cloud
+    website: https://www.lemonslice.cloud
   logo: logo.svg
   homepage: https://github.com/RoShioLeo/halo-plugin-dishes#readme
   repo: https://github.com/RoShioLeo/halo-plugin-dishes
